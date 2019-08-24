@@ -1,3 +1,13 @@
+# binaries
+main
+authenticator
+go_build_main_go
+__*
+
+# Dependency directories (remove the comment below to include it)
+# vendor/
+node_modules
+
 # Binaries for programs and plugins
 *.exe
 *.exe~
