@@ -1,3 +1,7 @@
+# configuration files
+*config.json
+users.json
+
 # binaries
 main
 authenticator
