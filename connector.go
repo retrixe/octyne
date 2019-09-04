@@ -56,10 +56,14 @@ func InitializeConnector(config Config) *Connector {
 
 		GET /server/{id}/files?path=path
 
-		- GET /server/{id}/file?path=path
+		GET /server/{id}/file?path=path
 		- DOWNLOAD /server/{id}/file?path=path
 		- POST /server/{id}/file?path=path
-		- DELETE /server/{id}/file?path=path
+		DELETE /server/{id}/file?path=path
+		- PATCH /server/{id}/file?path=path (moving files, copying files and renaming them)
+
+
+		POST /server/{id}/folder?path=path
 	*/
 	connector.registerRoutes()
 	return connector
@@ -177,6 +181,7 @@ func (connector *Connector) registerRoutes() {
 				http.Error(w, "{\"error\":\"Invalid operation requested!\"}", 400)
 				return
 			}
+			// GET /server/{id}
 		} else if r.Method == "GET" {
 		} else {
 			http.Error(w, "{\"error\":\"Only GET and POST is allowed!\"}", 405)
@@ -187,6 +192,7 @@ func (connector *Connector) registerRoutes() {
 	connector.Upgrader.CheckOrigin = func(r *http.Request) bool { return true }
 	connector.Router.HandleFunc("/server/{id}/console", func(w http.ResponseWriter, r *http.Request) {
 		// Check with authenticator.
+		// TODO: Need to figure out how to impl. WS authentication.
 		if !connector.Validate(w, r) {
 			return
 		}
@@ -210,11 +216,11 @@ func (connector *Connector) registerRoutes() {
 		c, err := connector.Upgrade(w, r, nil)
 		if err == nil {
 			defer c.Close()
-			// Add connection to the process.
+			// Add connection to the process after sending current console output.
 			process, _ := connector.Processes[id]
+			c.WriteMessage(websocket.TextMessage, []byte(process.Console)) // TODO: Consider Mutexes.
 			process.Clients[token] = c
 			// Read messages from the user and execute them.
-			c.WriteMessage(websocket.TextMessage, []byte(process.Console))
 			for {
 				// Another client has connected with the same token. Terminate existing connection.
 				if process.Clients[token] != c {
@@ -324,6 +330,32 @@ func (connector *Connector) registerRoutes() {
 				return
 			}
 			fmt.Fprint(w, "{\"success\":true}")
+			/*
+				} else if r.Method == "POST" {
+					// Parse our multipart form, 1024 << 20 specifies a maximum upload of 1024 MB files.
+					r.ParseMultipartForm(1024 << 20)
+					// FormFile returns the first file for the given key `myFile`
+					file, _, err := r.FormFile("myFile")
+					if err != nil {
+						return
+					}
+					defer file.Close()
+					// read the file.
+					toWrite, err := os.Open(path.Join(server.Directory, r.URL.Query().Get("path")))
+					stat, err1 := toWrite.Stat()
+					if err != nil {
+						http.Error(w, "{\"error\":\"Internal Server Error!\"}", 500)
+						return
+					} else if err1 == nil && stat.IsDir() {
+						http.Error(w, "{\"error\":\"This is a folder!\"}", 400)
+					}
+					defer toWrite.Close()
+					// write this byte array to our temporary file
+					io.Copy(toWrite, file)
+					fmt.Fprintf(w, "{\"success\":true}")
+			*/
+		} else {
+			http.Error(w, "{\"error\":\"Only GET, POST and DELETE are allowed!\"}", 405)
 		}
 	})
 }
