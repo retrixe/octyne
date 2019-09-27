@@ -58,10 +58,9 @@ func InitializeConnector(config Config) *Connector {
 
 		GET /server/{id}/file?path=path
 		- DOWNLOAD /server/{id}/file?path=path
-		- POST /server/{id}/file?path=path
+		POST /server/{id}/file?path=path
 		DELETE /server/{id}/file?path=path
 		- PATCH /server/{id}/file?path=path (moving files, copying files and renaming them)
-
 
 		POST /server/{id}/folder?path=path
 	*/
@@ -146,7 +145,7 @@ func (connector *Connector) registerRoutes() {
 		}
 		// Get the server being accessed.
 		id := mux.Vars(r)["id"]
-		_, err := connector.Config.Servers[id]
+		_, err := connector.Processes[id]
 		// In case the server doesn't exist.
 		if !err {
 			http.Error(w, "{\"error\":\"This server does not exist!\"}", 404)
@@ -206,7 +205,7 @@ func (connector *Connector) registerRoutes() {
 		}
 		// Get the server being accessed.
 		id := mux.Vars(r)["id"]
-		_, exists := connector.Config.Servers[id]
+		_, exists := connector.Processes[id]
 		// In case the server doesn't exist.
 		if !exists {
 			http.Error(w, "{\"error\":\"This server does not exist!\"", 404)
@@ -252,7 +251,7 @@ func (connector *Connector) registerRoutes() {
 		}
 		// Get the server being accessed.
 		id := mux.Vars(r)["id"]
-		server, err := connector.Config.Servers[id]
+		server, err := connector.Processes[id]
 		// In case the server doesn't exist.
 		if !err {
 			http.Error(w, "{\"error\":\"This server does not exist!\"}", 404)
@@ -294,7 +293,7 @@ func (connector *Connector) registerRoutes() {
 		// }
 		// Get the server being accessed.
 		id := mux.Vars(r)["id"]
-		server, err := connector.Config.Servers[id]
+		server, err := connector.Processes[id]
 		// In case the server doesn't exist.
 		if !err {
 			http.Error(w, "{\"error\":\"This server does not exist!\"}", 404)
@@ -314,7 +313,7 @@ func (connector *Connector) registerRoutes() {
 			w.Header().Set("Content-Disposition", "attachment; filename="+stat.Name())
 			w.Header().Set("Content-Type", http.DetectContentType(buffer))
 			w.Header().Set("Content-Length", fmt.Sprint(stat.Size()))
-			w.Write(buffer)
+			file, _ = os.Open(path.Join(server.Directory, r.URL.Query().Get("path")))
 			io.Copy(w, file)
 		} else if r.Method == "DELETE" {
 			// Check if the file exists.
@@ -330,32 +329,64 @@ func (connector *Connector) registerRoutes() {
 				return
 			}
 			fmt.Fprint(w, "{\"success\":true}")
-			/*
-				} else if r.Method == "POST" {
-					// Parse our multipart form, 1024 << 20 specifies a maximum upload of 1024 MB files.
-					r.ParseMultipartForm(1024 << 20)
-					// FormFile returns the first file for the given key `myFile`
-					file, _, err := r.FormFile("myFile")
-					if err != nil {
-						return
-					}
-					defer file.Close()
-					// read the file.
-					toWrite, err := os.Open(path.Join(server.Directory, r.URL.Query().Get("path")))
-					stat, err1 := toWrite.Stat()
-					if err != nil {
-						http.Error(w, "{\"error\":\"Internal Server Error!\"}", 500)
-						return
-					} else if err1 == nil && stat.IsDir() {
-						http.Error(w, "{\"error\":\"This is a folder!\"}", 400)
-					}
-					defer toWrite.Close()
-					// write this byte array to our temporary file
-					io.Copy(toWrite, file)
-					fmt.Fprintf(w, "{\"success\":true}")
-			*/
+		} else if r.Method == "POST" {
+			// Parse our multipart form, 100 << 20 specifies a maximum upload of 100 MB files.
+			r.ParseMultipartForm(100 << 20)
+			// FormFile returns the first file for the given key `myFile`
+			file, meta, err := r.FormFile("upload")
+			if err != nil {
+				return
+			}
+			defer file.Close()
+			// read the file.
+			toWrite, err := os.Create(path.Join(server.Directory, r.URL.Query().Get("path"), meta.Filename))
+			stat, err1 := toWrite.Stat()
+			if err != nil {
+				http.Error(w, "{\"error\":\"Internal Server Error!\"}", 500)
+				return
+			} else if err1 == nil && stat.IsDir() {
+				http.Error(w, "{\"error\":\"This is a folder!\"}", 400)
+			}
+			defer toWrite.Close()
+			// write this byte array to our file
+			io.Copy(toWrite, file)
+			fmt.Fprintf(w, "{\"success\":true}")
 		} else {
 			http.Error(w, "{\"error\":\"Only GET, POST and DELETE are allowed!\"}", 405)
+		}
+	})
+
+	// POST /server/{id}/folder?path=path
+	connector.Router.HandleFunc("/server/{id}/folder", func(w http.ResponseWriter, r *http.Request) {
+		// Check with authenticator.
+		if !connector.Validate(w, r) {
+			return
+		}
+		// Get the server being accessed.
+		id := mux.Vars(r)["id"]
+		server, err := connector.Processes[id]
+		// In case the server doesn't exist.
+		if !err {
+			http.Error(w, "{\"error\":\"This server does not exist!\"}", 404)
+			return
+		}
+		if r.Method == "POST" {
+			// Check if the folder already exists.
+			file := path.Join(server.Directory, r.URL.Query().Get("path"))
+			_, err := os.Stat(file)
+			if !os.IsNotExist(err) {
+				http.Error(w, "{\"error\":\"This folder already exists!\"}", 400)
+				return
+			}
+			// Create the folder.
+			err = os.Mkdir(file, os.ModePerm)
+			if err != nil {
+				http.Error(w, "{\"error\":\"Internal Server Error!\"}", 500)
+				return
+			}
+			fmt.Fprintf(w, "{\"success\":true}")
+		} else {
+			http.Error(w, "{\"error\":\"Only POST is allowed!\"}", 405)
 		}
 	})
 }
