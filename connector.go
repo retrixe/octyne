@@ -82,6 +82,11 @@ func (connector *Connector) AddProcess(process *Process) {
 		scanner.Split(bufio.ScanLines)
 		for scanner.Scan() {
 			m := scanner.Text()
+			// Truncate the console scrollback to 2500 to prevent excess memory usage and download cost.
+			truncate := strings.Split(server.Console, "\n")
+			if len(truncate) >= 2500 {
+				server.Console = strings.Join(truncate[len(truncate)-2501:], "\n")
+			}
 			server.Console = server.Console + "\n" + m
 			for _, connection := range server.Clients {
 				connection.WriteMessage(websocket.TextMessage, []byte(m))
@@ -138,6 +143,13 @@ func (connector *Connector) registerRoutes() {
 
 	// GET /server/{id}
 	// POST /server/{id}
+	type serverResponse struct {
+		CPUUsage      int    `json:"cpuUsage"`
+		MemoryUsage   int    `json:"memoryUsage"`
+		TotalMemory   bool   `json:"totalMemory"`
+		Uptime        int64  `json:"uptime"`
+		ServerVersion string `json:"serverVersion"`
+	}
 	connector.Router.HandleFunc("/server/{id}", func(w http.ResponseWriter, r *http.Request) {
 		// Check with authenticator.
 		if !connector.Validate(w, r) {
@@ -182,6 +194,28 @@ func (connector *Connector) registerRoutes() {
 			}
 			// GET /server/{id}
 		} else if r.Method == "GET" {
+			// Get the PID of the process.
+			/*
+				proc := server.Process.Command.Process
+				if proc == nil || proc.Pid < 1 {
+				} // TODO: What if server process does not exist?
+
+				// Get CPU usage and memory usage of the process.
+				output, err := exec.Command("ps", "-p", fmt.Sprint(proc.Pid), "-o", "%cpu,%mem,cmd").Output()
+				if err != nil {
+					http.Error(w, "{\"error\":\"Internal Server Error! Is `ps` installed?\"}", 500)
+					log.Println("Octyne requires ps on a Linux system to return statistics!")
+					return
+				}
+				usage := strings.Split(string(output), "\n")[1]
+			*/
+
+			// Send a response.
+			// TODO: Send uptime and server version.
+			res := serverResponse{
+				Uptime: 1,
+			}
+			json.NewEncoder(w).Encode(res)
 		} else {
 			http.Error(w, "{\"error\":\"Only GET and POST is allowed!\"}", 405)
 		}
@@ -205,7 +239,7 @@ func (connector *Connector) registerRoutes() {
 		}
 		// Get the server being accessed.
 		id := mux.Vars(r)["id"]
-		_, exists := connector.Processes[id]
+		process, exists := connector.Processes[id]
 		// In case the server doesn't exist.
 		if !exists {
 			http.Error(w, "{\"error\":\"This server does not exist!\"", 404)
@@ -215,8 +249,23 @@ func (connector *Connector) registerRoutes() {
 		c, err := connector.Upgrade(w, r, nil)
 		if err == nil {
 			defer c.Close()
+			// TODO: Wait for a message containing the token and then check if the token is valid.
+			/*
+				auth := false
+				_, m, err := c.ReadMessage()
+				if err != nil {
+					return
+				}
+				for _, value := range connector.Authenticator.Tokens {
+					if value == string(m) && value != "" {
+						auth = true
+					}
+				}
+				if !auth {
+					return
+				}
+			*/
 			// Add connection to the process after sending current console output.
-			process, _ := connector.Processes[id]
 			c.WriteMessage(websocket.TextMessage, []byte(process.Console)) // TODO: Consider Mutexes.
 			process.Clients[token] = c
 			// Read messages from the user and execute them.
@@ -241,6 +290,7 @@ func (connector *Connector) registerRoutes() {
 	type serverFilesResponse struct {
 		Name         string `json:"name"`
 		Size         int64  `json:"size"`
+		MimeType     string `json:"mimeType"`
 		Folder       bool   `json:"folder"`
 		LastModified int64  `json:"lastModified"`
 	}
@@ -258,6 +308,7 @@ func (connector *Connector) registerRoutes() {
 			return
 		}
 		// Get list of files and folders in the directory.
+		// TODO: Support symlinks.
 		folder, err1 := os.Open(path.Join(server.Directory, r.URL.Query().Get("path")))
 		if err1 != nil {
 			http.Error(w, "{\"error\":\"This folder does not exist!\"}", 404)
@@ -272,11 +323,22 @@ func (connector *Connector) registerRoutes() {
 		toSend := make(map[string]([]serverFilesResponse))
 		toSend["contents"] = make([]serverFilesResponse, 0, len(contents))
 		for _, value := range contents {
+			// Determine the MIME-Type of the file.
+			mimeType := ""
+			if !value.IsDir() {
+				buffer := make([]byte, 512)
+				file, err := os.Open(path.Join(server.Directory, r.URL.Query().Get("path"), value.Name()))
+				if err != nil {
+					file.Read(buffer)
+					mimeType = http.DetectContentType(buffer)
+				}
+			}
 			toSend["contents"] = append(toSend["contents"], serverFilesResponse{
 				Folder:       value.IsDir(),
 				Name:         value.Name(),
 				Size:         value.Size(),
 				LastModified: value.ModTime().Unix(),
+				MimeType:     mimeType,
 			})
 		}
 		json.NewEncoder(w).Encode(toSend)
@@ -286,6 +348,7 @@ func (connector *Connector) registerRoutes() {
 	// DOWNLOAD /server/{id}/file?path=path
 	// POST /server/{id}/file?path=path
 	// DELETE /server/{id}/file?path=path
+	// PATCH /server/{id}/file?path=path
 	connector.Router.HandleFunc("/server/{id}/file", func(w http.ResponseWriter, r *http.Request) {
 		// TODO: Check with authenticator.
 		// if !connector.Validate(w, r) {
@@ -332,7 +395,7 @@ func (connector *Connector) registerRoutes() {
 		} else if r.Method == "POST" {
 			// Parse our multipart form, 100 << 20 specifies a maximum upload of 100 MB files.
 			r.ParseMultipartForm(100 << 20)
-			// FormFile returns the first file for the given key `myFile`
+			// FormFile returns the first file for the given key `upload`
 			file, meta, err := r.FormFile("upload")
 			if err != nil {
 				return
@@ -346,13 +409,56 @@ func (connector *Connector) registerRoutes() {
 				return
 			} else if err1 == nil && stat.IsDir() {
 				http.Error(w, "{\"error\":\"This is a folder!\"}", 400)
+				return
 			}
 			defer toWrite.Close()
 			// write this byte array to our file
 			io.Copy(toWrite, file)
 			fmt.Fprintf(w, "{\"success\":true}")
+		} else if r.Method == "PATCH" {
+			// Get the request body to check the operation.
+			var body bytes.Buffer
+			body.ReadFrom(r.Body)
+			operation := strings.Split(body.String(), " ")
+			// Possible operations: mv, cp
+			if operation[0] == "mv" || operation[0] == "cp" {
+				if len(operation) != 3 {
+					http.Error(w, "{\"error\":\""+operation[0]+" operation requires two arguments!\"}", 405)
+					return
+				}
+				// Check if original file exists.
+				oldpath := path.Join(server.Directory, operation[1])
+				newpath := path.Join(server.Directory, operation[2])
+				file, err := os.Open(oldpath)
+				_, err1 := file.Stat()
+				if err != nil || os.IsNotExist(err1) {
+					http.Error(w, "{\"error\":\"This file does not exist!\"}", 404)
+					return
+				}
+				// Check if destination file exists.
+				file, err = os.Open(newpath)
+				_, err1 = file.Stat()
+				if err == nil || os.IsExist(err1) {
+					http.Error(w, "{\"error\":\"This file already exists!\"}", 405)
+					return
+				}
+				// Move file if operation is mv.
+				if operation[0] == "mv" {
+					err := os.Rename(oldpath, newpath)
+					if err != nil {
+						http.Error(w, "{\"error\":\"Internal Server Error!\"}", 500)
+						return
+					}
+					fmt.Fprintf(w, "{\"success\":true}")
+				} else {
+					// TODO: Implement.
+					http.Error(w, "{\"error\":\"Internal Server Error!\"}", 500)
+				}
+			} else {
+				http.Error(w, "{\"error\":\"Invalid operation! Operations available: mv,cp\"}", 405)
+			}
 		} else {
-			http.Error(w, "{\"error\":\"Only GET, POST and DELETE are allowed!\"}", 405)
+			http.Error(w, "{\"error\":\"Only GET, POST, PATCH and DELETE are allowed!\"}", 405)
 		}
 	})
 
