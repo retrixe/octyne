@@ -71,3 +71,14 @@ func (a *Authenticator) Login(username string, password string) string {
 	a.Tokens = append(a.Tokens, base64.StdEncoding.EncodeToString(token))
 	return base64.StdEncoding.EncodeToString(token)
 }
+
+// Logout ... Allows logging out of a user and deleting the token from the server.
+func (a *Authenticator) Logout(token string) bool {
+	for i, t := range a.Tokens {
+		if t == token {
+			a.Tokens = append(a.Tokens[:i], a.Tokens[i+1:]...)
+			return true
+		}
+	}
+	return false
+}

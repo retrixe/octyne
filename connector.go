@@ -43,6 +43,7 @@ func InitializeConnector(config Config) *Connector {
 	/*
 		All routes:
 		GET /login
+		GET /logout
 
 		GET /servers
 
@@ -54,7 +55,7 @@ func InitializeConnector(config Config) *Connector {
 		GET /server/{id}/files?path=path
 
 		GET /server/{id}/file?path=path
-		- DOWNLOAD /server/{id}/file?path=path
+		- DOWNLOAD /server/{id}/file?path=path (also a way to download as ZIP)
 		POST /server/{id}/file?path=path
 		DELETE /server/{id}/file?path=path
 		- PATCH /server/{id}/file?path=path (moving files, copying files and renaming them)
@@ -119,6 +120,23 @@ func (connector *Connector) registerRoutes() {
 		}
 		// Send the response.
 		json.NewEncoder(w).Encode(loginResponse{Token: token})
+	})
+
+	connector.Router.HandleFunc("/logout", func(w http.ResponseWriter, r *http.Request) {
+		// In case the authorization header doesn't exist.
+		token := r.Header.Get("Authorization")
+		if token == "" {
+			http.Error(w, "{\"error\":\"Token not provided!\"}", 400)
+			return
+		}
+		// Authorize the user.
+		success := connector.Logout(token)
+		if !success {
+			http.Error(w, "{\"error\":\"Invalid token, failed to logout!\"}", 401)
+			return
+		}
+		// Send the response.
+		fmt.Fprint(w, "{\"success\": true}")
 	})
 
 	// GET /servers

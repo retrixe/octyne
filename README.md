@@ -26,7 +26,7 @@ NOTE: Remove the comments when creating the file as JSON does not support commen
 }
 ```
 
-## users.json
+### users.json
 
 Contains users who can log into Octyne. Use a secure method to hash your passwords as Octyne does not handle account management at the moment.
 
