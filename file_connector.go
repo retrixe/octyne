@@ -1,12 +1,16 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path"
+	"runtime"
+	"strings"
 
 	"github.com/gorilla/mux"
 )
@@ -52,9 +56,14 @@ func (connector *Connector) registerFileRoutes() {
 			// Determine the MIME-Type of the file.
 			mimeType := ""
 			if !value.IsDir() {
-				buffer := make([]byte, 512)
-				file, err := os.Open(path.Join(server.Directory, r.URL.Query().Get("path"), value.Name()))
-				if err != nil {
+				var length int64 = 512
+				if value.Size() < 512 {
+					length = value.Size()
+				}
+				buffer := make([]byte, length)
+				path := path.Join(server.Directory, r.URL.Query().Get("path"), value.Name())
+				file, err := os.Open(path)
+				if err == nil {
 					file.Read(buffer)
 					mimeType = http.DetectContentType(buffer)
 				}
@@ -141,50 +150,64 @@ func (connector *Connector) registerFileRoutes() {
 			// write this byte array to our file
 			io.Copy(toWrite, file)
 			fmt.Fprintf(w, "{\"success\":true}")
-			/*
-				} else if r.Method == "PATCH" {
-					// Get the request body to check the operation.
-					var body bytes.Buffer
-					body.ReadFrom(r.Body)
-					operation := strings.Split(body.String(), " ")
-					// Possible operations: mv, cp
-					if operation[0] == "mv" || operation[0] == "cp" {
-						if len(operation) != 3 {
-							http.Error(w, "{\"error\":\""+operation[0]+" operation requires two arguments!\"}", 405)
-							return
-						}
-						// Check if original file exists.
-						oldpath := path.Join(server.Directory, operation[1])
-						newpath := path.Join(server.Directory, operation[2])
-						file, err := os.Open(oldpath)
-						_, err1 := file.Stat()
-						if err != nil || os.IsNotExist(err1) {
-							http.Error(w, "{\"error\":\"This file does not exist!\"}", 404)
-							return
-						}
-						// Check if destination file exists.
-						file, err = os.Open(newpath)
-						_, err1 = file.Stat()
-						if err == nil || os.IsExist(err1) {
-							http.Error(w, "{\"error\":\"This file already exists!\"}", 405)
-							return
-						}
-						// Move file if operation is mv.
-						if operation[0] == "mv" {
-							err := os.Rename(oldpath, newpath)
-							if err != nil {
-								http.Error(w, "{\"error\":\"Internal Server Error!\"}", 500)
-								return
-							}
-							fmt.Fprintf(w, "{\"success\":true}")
-						} else {
-							// TODO: Implement.
-							http.Error(w, "{\"error\":\"Internal Server Error!\"}", 500)
-						}
-					} else {
-						http.Error(w, "{\"error\":\"Invalid operation! Operations available: mv,cp\"}", 405)
+		} else if r.Method == "PATCH" {
+			// Get the request body to check the operation.
+			var body bytes.Buffer
+			body.ReadFrom(r.Body)
+			operation := strings.Split(body.String(), " ")
+			// Possible operations: mv, cp
+			if operation[0] == "mv" || operation[0] == "cp" {
+				if len(operation) != 3 {
+					http.Error(w, "{\"error\":\""+operation[0]+" operation requires two arguments!\"}", 405)
+					return
+				}
+				// Check if original file exists.
+				oldpath := path.Join(server.Directory, operation[1])
+				newpath := path.Join(server.Directory, operation[2])
+				if !strings.HasPrefix(oldpath, path.Clean(server.Directory)) ||
+					!strings.HasPrefix(newpath, path.Clean(server.Directory)) {
+					http.Error(w, "{\"error\":\"The folder requested is outside the server!\"}", 403)
+					return
+				}
+				file, err := os.Open(oldpath)
+				_, err1 := file.Stat()
+				if err != nil || os.IsNotExist(err1) {
+					http.Error(w, "{\"error\":\"This file does not exist!\"}", 404)
+					return
+				}
+				// Check if destination file exists.
+				file, err = os.Open(newpath)
+				stat, err1 := file.Stat()
+				if (err == nil || os.IsExist(err1)) && stat != nil && !stat.IsDir() {
+					http.Error(w, "{\"error\":\"This file already exists!\"}", 405)
+					return
+				}
+				// Move file if operation is mv.
+				if operation[0] == "mv" {
+					err := os.Rename(oldpath, newpath)
+					if err != nil {
+						http.Error(w, "{\"error\":\"Internal Server Error!\"}", 500)
+						return
 					}
-			*/
+					fmt.Fprintf(w, "{\"success\":true}")
+				} else {
+					var cmd *exec.Cmd
+					// TODO: Needs to be looked into, whether or not it actually works.
+					if runtime.GOOS == "windows" {
+						cmd = exec.Command("robocopy", oldpath, newpath)
+					} else {
+						cmd = exec.Command("cp", "-r", oldpath, newpath)
+					}
+					err := cmd.Run()
+					if err != nil || cmd.ProcessState.ExitCode() == 16 {
+						http.Error(w, "{\"error\":\"Internal Server Error!\"}", 500)
+						return
+					}
+					fmt.Fprintf(w, "{\"success\":true}")
+				}
+			} else {
+				http.Error(w, "{\"error\":\"Invalid operation! Operations available: mv,cp\"}", 405)
+			}
 		} else {
 			http.Error(w, "{\"error\":\"Only GET, POST, PATCH and DELETE are allowed!\"}", 405)
 		}

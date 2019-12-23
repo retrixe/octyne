@@ -22,7 +22,7 @@ func InitializeAuthenticator(config Config) *Authenticator {
 	// Create the connector.
 	connector := &Authenticator{
 		Config: config,
-		Tokens: make([]string, 10),
+		Tokens: make([]string, 0),
 	}
 	return connector
 }
