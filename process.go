@@ -15,13 +15,12 @@ import (
 // Process ... Defines a process running in octyne.
 type Process struct {
 	ServerConfig
-	Name             string
-	WorkingDirectory string
-	Command          *exec.Cmd
-	Online           int // 0 for offline, 1 for online, 2 for failure
-	Output           *io.PipeReader
-	Input            *io.PipeWriter
-	Stdin            io.WriteCloser
+	Name    string
+	Command *exec.Cmd
+	Online  int // 0 for offline, 1 for online, 2 for failure
+	Output  *io.PipeReader
+	Input   *io.PipeWriter
+	Stdin   io.WriteCloser
 }
 
 // RunProcess ... Runs a process.
@@ -29,12 +28,11 @@ func RunProcess(name string, config ServerConfig, connector *Connector) *Process
 	// Create the process.
 	output, input := io.Pipe()
 	process := &Process{
-		Name:             name,
-		WorkingDirectory: config.Directory,
-		Online:           0,
-		ServerConfig:     config,
-		Output:           output,
-		Input:            input,
+		Name:         name,
+		Online:       0,
+		ServerConfig: config,
+		Output:       output,
+		Input:        input,
 	}
 	// Run the command.
 	process.StartProcess()
@@ -119,6 +117,7 @@ func (process *Process) MonitorProcess() error {
 		process.Online = 2
 		process.SendConsoleOutput("[Octyne] Server " + process.Name + " has crashed!")
 		log.Println("Server (" + process.Name + ") has crashed!")
+		// TODO: Implement a limit of crash restarts before letting the server stop.
 		process.SendConsoleOutput("[Octyne] Restarting server " + process.Name + " due to default behaviour.")
 		process.StartProcess()
 	}

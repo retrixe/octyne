@@ -9,7 +9,8 @@ Octyne depends on two files in the same directory to get configuration from.
 ### config.json
 
 Used to configure the servers Octyne should start along with Redis-based authentication for allowing more than a single node.
-NOTE: Remove the comments when creating the file as JSON does not support comments!
+
+*NOTE: Remove the comments when creating the file as JSON does not support comments!*
 
 ```json
 {

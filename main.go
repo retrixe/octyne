@@ -46,17 +46,7 @@ func main() {
 		handlers.AllowedMethods([]string{"GET", "POST", "PUT", "HEAD", "OPTIONS", "PATCH", "DELETE"}),
 		handlers.AllowedOrigins([]string{"*"}),
 	)(connector.Router)))
-	/*
-		err := http.ListenAndServe(":42069", connector.Router)
-		if err != nil {
-			log.Fatal(err)
-		} else {
-			log.Println("HTTP server listening successfully on port 42069!")
-		}
-	*/
 	// TODO: Move above logic to connector.go
-	// TODO: Add authentication logic
-	// TODO: Authentication should support Redis
-	// TODO: Complete process.go
+	// TODO: Add complete authentication logic with Redis support
 	// TODO: Complete all routes
 }

@@ -55,12 +55,16 @@ func InitializeConnector(config Config) *Connector {
 		GET /server/{id}/files?path=path
 
 		GET /server/{id}/file?path=path
-		- DOWNLOAD /server/{id}/file?path=path (also a way to download as ZIP)
-		POST /server/{id}/file?path=path
+		POST /server/{id}/file?path=path (takes a form file with the file name, path= is path to folder)
 		DELETE /server/{id}/file?path=path
-		- PATCH /server/{id}/file?path=path (moving files, copying files and renaming them)
+		PATCH /server/{id}/file (moving files, copying files and renaming them)
+
+		- GET /server/{id}/fileDownload?token=token (also a way to download as ZIP)
+		- POST /server/{id}/fileDownload?token=token (also a way to download as ZIP)
 
 		POST /server/{id}/folder?path=path
+
+		NOTE: All routes marked with - are incomplete.
 	*/
 	connector.registerRoutes()
 	connector.registerFileRoutes()

@@ -85,10 +85,10 @@ func (connector *Connector) registerFileRoutes() {
 	// DELETE /server/{id}/file?path=path
 	// PATCH /server/{id}/file?path=path
 	connector.Router.HandleFunc("/server/{id}/file", func(w http.ResponseWriter, r *http.Request) {
-		// TODO: Check with authenticator.
-		// if !connector.Validate(w, r) {
-		// 	return
-		// }
+		// TODO: Check with authenticator for GET method.
+		if !connector.Validate(w, r) && r.Method != "GET" {
+			return
+		}
 		// Get the server being accessed.
 		id := mux.Vars(r)["id"]
 		server, err := connector.Processes[id]
@@ -116,6 +116,10 @@ func (connector *Connector) registerFileRoutes() {
 		} else if r.Method == "DELETE" {
 			// Check if the file exists.
 			file := path.Join(server.Directory, r.URL.Query().Get("path"))
+			if file == "/" {
+				http.Error(w, "{\"error\":\"This operation is dangerous and has been forbidden!\"}", 403)
+				return
+			}
 			_, err := os.Stat(file)
 			if err != nil || os.IsNotExist(err) {
 				http.Error(w, "{\"error\":\"This file does not exist!\"}", 404)
@@ -154,7 +158,7 @@ func (connector *Connector) registerFileRoutes() {
 			// Get the request body to check the operation.
 			var body bytes.Buffer
 			body.ReadFrom(r.Body)
-			operation := strings.Split(body.String(), " ")
+			operation := strings.Split(body.String(), "\n")
 			// Possible operations: mv, cp
 			if operation[0] == "mv" || operation[0] == "cp" {
 				if len(operation) != 3 {
@@ -162,6 +166,7 @@ func (connector *Connector) registerFileRoutes() {
 					return
 				}
 				// Check if original file exists.
+				// TODO: Needs better sanitation.
 				oldpath := path.Join(server.Directory, operation[1])
 				newpath := path.Join(server.Directory, operation[2])
 				if !strings.HasPrefix(oldpath, path.Clean(server.Directory)) ||
