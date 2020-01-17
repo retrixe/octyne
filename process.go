@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
-	"syscall"
 )
 
 // Process ... Defines a process running in octyne.
@@ -57,7 +56,9 @@ func (process *Process) StartProcess() error {
 	process.Online = 2
 	if err != nil {
 		log.Println("Failed to start server (" + name + ")! The following error occured:\n" + err.Error())
-	} else if _, err := os.FindProcess(command.Process.Pid); err != nil || command.Process.Signal(syscall.Signal(0)) != nil {
+	} else if _, err := os.FindProcess(command.Process.Pid); err != nil /* Windows */ ||
+		// command.Process.Signal(syscall.Signal(0)) != nil /* Unix, disabled */ ||
+		command.ProcessState != nil /* Universal */ {
 		log.Println("Server (" + name + ") is not online!")
 		// Get the stdout and stderr and log..
 		var stdout bytes.Buffer
