@@ -9,11 +9,17 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"runtime"
 	"strings"
 
 	"github.com/gorilla/mux"
 )
+
+// joinPath joins any number of path elements into a single path, adding a separating slash if necessary.
+func joinPath(elem ...string) string {
+	return filepath.FromSlash(path.Join(elem...))
+}
 
 func (connector *Connector) registerFileRoutes() {
 	// GET /server/{id}/files?path=path
@@ -38,8 +44,7 @@ func (connector *Connector) registerFileRoutes() {
 			return
 		}
 		// Get list of files and folders in the directory.
-		// TODO: Support symlinks.
-		folder, err1 := os.Open(path.Join(server.Directory, r.URL.Query().Get("path")))
+		folder, err1 := os.Open(joinPath(server.Directory, r.URL.Query().Get("path")))
 		if err1 != nil {
 			http.Error(w, "{\"error\":\"This folder does not exist!\"}", 404)
 			return
@@ -54,14 +59,17 @@ func (connector *Connector) registerFileRoutes() {
 		toSend["contents"] = make([]serverFilesResponse, 0, len(contents))
 		for _, value := range contents {
 			// Determine the MIME-Type of the file.
+			// TODO: Support symlinks.
 			mimeType := ""
-			if !value.IsDir() {
+			if value.Mode()&os.ModeSymlink != 0 {
+				mimeType = "inode/symlink"
+			} else if !value.IsDir() {
 				var length int64 = 512
 				if value.Size() < 512 {
 					length = value.Size()
 				}
 				buffer := make([]byte, length)
-				path := path.Join(server.Directory, r.URL.Query().Get("path"), value.Name())
+				path := joinPath(server.Directory, r.URL.Query().Get("path"), value.Name())
 				file, err := os.Open(path)
 				if err == nil {
 					file.Read(buffer)
@@ -69,7 +77,7 @@ func (connector *Connector) registerFileRoutes() {
 				}
 			}
 			toSend["contents"] = append(toSend["contents"], serverFilesResponse{
-				Folder:       value.IsDir(),
+				Folder:       value.IsDir() || mimeType == "inode/symlink",
 				Name:         value.Name(),
 				Size:         value.Size(),
 				LastModified: value.ModTime().Unix(),
@@ -99,7 +107,7 @@ func (connector *Connector) registerFileRoutes() {
 		}
 		if r.Method == "GET" {
 			// Get list of files and folders in the directory.
-			file, err := os.Open(path.Join(server.Directory, r.URL.Query().Get("path")))
+			file, err := os.Open(joinPath(server.Directory, r.URL.Query().Get("path")))
 			stat, err1 := file.Stat()
 			if err != nil || err1 != nil {
 				http.Error(w, "{\"error\":\"This file does not exist!\"}", 404)
@@ -111,11 +119,11 @@ func (connector *Connector) registerFileRoutes() {
 			w.Header().Set("Content-Disposition", "attachment; filename="+stat.Name())
 			w.Header().Set("Content-Type", http.DetectContentType(buffer))
 			w.Header().Set("Content-Length", fmt.Sprint(stat.Size()))
-			file, _ = os.Open(path.Join(server.Directory, r.URL.Query().Get("path")))
+			file, _ = os.Open(joinPath(server.Directory, r.URL.Query().Get("path")))
 			io.Copy(w, file)
 		} else if r.Method == "DELETE" {
 			// Check if the file exists.
-			file := path.Join(server.Directory, r.URL.Query().Get("path"))
+			file := joinPath(server.Directory, r.URL.Query().Get("path"))
 			if file == "/" {
 				http.Error(w, "{\"error\":\"This operation is dangerous and has been forbidden!\"}", 403)
 				return
@@ -141,7 +149,7 @@ func (connector *Connector) registerFileRoutes() {
 			}
 			defer file.Close()
 			// read the file.
-			toWrite, err := os.Create(path.Join(server.Directory, r.URL.Query().Get("path"), meta.Filename))
+			toWrite, err := os.Create(joinPath(server.Directory, r.URL.Query().Get("path"), meta.Filename))
 			stat, err1 := toWrite.Stat()
 			if err != nil {
 				http.Error(w, "{\"error\":\"Internal Server Error!\"}", 500)
@@ -167,8 +175,8 @@ func (connector *Connector) registerFileRoutes() {
 				}
 				// Check if original file exists.
 				// TODO: Needs better sanitation.
-				oldpath := path.Join(server.Directory, operation[1])
-				newpath := path.Join(server.Directory, operation[2])
+				oldpath := joinPath(server.Directory, operation[1])
+				newpath := joinPath(server.Directory, operation[2])
 				if !strings.HasPrefix(oldpath, path.Clean(server.Directory)) ||
 					!strings.HasPrefix(newpath, path.Clean(server.Directory)) {
 					http.Error(w, "{\"error\":\"The folder requested is outside the server!\"}", 403)
@@ -186,6 +194,8 @@ func (connector *Connector) registerFileRoutes() {
 				if (err == nil || os.IsExist(err1)) && stat != nil && !stat.IsDir() {
 					http.Error(w, "{\"error\":\"This file already exists!\"}", 405)
 					return
+				} else if stat != nil && stat.IsDir() {
+					newpath = joinPath(newpath, path.Base(oldpath))
 				}
 				// Move file if operation is mv.
 				if operation[0] == "mv" {
@@ -234,7 +244,7 @@ func (connector *Connector) registerFileRoutes() {
 		}
 		if r.Method == "POST" {
 			// Check if the folder already exists.
-			file := path.Join(server.Directory, r.URL.Query().Get("path"))
+			file := joinPath(server.Directory, r.URL.Query().Get("path"))
 			_, err := os.Stat(file)
 			if !os.IsNotExist(err) {
 				http.Error(w, "{\"error\":\"This folder already exists!\"}", 400)

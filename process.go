@@ -20,6 +20,7 @@ type Process struct {
 	Output  *io.PipeReader
 	Input   *io.PipeWriter
 	Stdin   io.WriteCloser
+	Crashes int
 }
 
 // RunProcess ... Runs a process.
@@ -32,6 +33,7 @@ func RunProcess(name string, config ServerConfig, connector *Connector) *Process
 		ServerConfig: config,
 		Output:       output,
 		Input:        input,
+		Crashes:      0,
 	}
 	// Run the command.
 	process.StartProcess()
@@ -112,15 +114,18 @@ func (process *Process) MonitorProcess() error {
 	// Mark as offline appropriately.
 	if process.Command.ProcessState.Success() || process.Online == 0 {
 		process.Online = 0
+		process.Crashes = 0
 		log.Println("Server (" + process.Name + ") has stopped.")
 		process.SendConsoleOutput("[Octyne] Server " + process.Name + " has stopped.")
 	} else {
 		process.Online = 2
+		process.Crashes++
 		process.SendConsoleOutput("[Octyne] Server " + process.Name + " has crashed!")
 		log.Println("Server (" + process.Name + ") has crashed!")
-		// TODO: Implement a limit of crash restarts before letting the server stop.
-		process.SendConsoleOutput("[Octyne] Restarting server " + process.Name + " due to default behaviour.")
-		process.StartProcess()
+		if process.Crashes <= 3 {
+			process.SendConsoleOutput("[Octyne] Restarting server " + process.Name + " due to default behaviour.")
+			process.StartProcess()
+		}
 	}
 	return err
 }
