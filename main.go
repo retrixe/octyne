@@ -38,6 +38,9 @@ func main() {
 
 	// Setup daemon connector.
 	connector := InitializeConnector(config)
+	if connector.Authenticator.Redis != nil {
+		defer connector.Authenticator.Redis.Close()
+	}
 
 	// Run processes, passing the daemon connector.
 	for _, name := range servers {

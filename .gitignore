@@ -4,6 +4,7 @@ users.json
 
 # binaries
 main
+/octyne
 authenticator
 go_build_main_go
 __*

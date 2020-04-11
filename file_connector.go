@@ -59,7 +59,6 @@ func (connector *Connector) registerFileRoutes() {
 		toSend["contents"] = make([]serverFilesResponse, 0, len(contents))
 		for _, value := range contents {
 			// Determine the MIME-Type of the file.
-			// TODO: Support symlinks.
 			mimeType := ""
 			if value.Mode()&os.ModeSymlink != 0 {
 				mimeType = "inode/symlink"
