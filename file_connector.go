@@ -45,6 +45,7 @@ func (connector *Connector) registerFileRoutes() {
 		}
 		// Get list of files and folders in the directory.
 		folder, err1 := os.Open(joinPath(server.Directory, r.URL.Query().Get("path")))
+		defer folder.Close()
 		if err1 != nil {
 			http.Error(w, "{\"error\":\"This folder does not exist!\"}", 404)
 			return
@@ -73,6 +74,7 @@ func (connector *Connector) registerFileRoutes() {
 				if err == nil {
 					file.Read(buffer)
 					mimeType = http.DetectContentType(buffer)
+					file.Close()
 				}
 			}
 			toSend["contents"] = append(toSend["contents"], serverFilesResponse{
@@ -115,10 +117,12 @@ func (connector *Connector) registerFileRoutes() {
 			// Send the response.
 			buffer := make([]byte, 512)
 			file.Read(buffer)
+			file.Close()
 			w.Header().Set("Content-Disposition", "attachment; filename="+stat.Name())
 			w.Header().Set("Content-Type", http.DetectContentType(buffer))
 			w.Header().Set("Content-Length", fmt.Sprint(stat.Size()))
 			file, _ = os.Open(joinPath(server.Directory, r.URL.Query().Get("path")))
+			defer file.Close()
 			io.Copy(w, file)
 		} else if r.Method == "DELETE" {
 			// Check if the file exists.
@@ -133,7 +137,11 @@ func (connector *Connector) registerFileRoutes() {
 				return
 			}
 			err = os.RemoveAll(file)
-			if err != nil {
+			if err != nil && err.(*os.PathError).Err != nil && err.(*os.PathError).Err.Error() ==
+				"The process cannot access the file because it is being used by another process." {
+				http.Error(w, "{\"error\":\""+err.(*os.PathError).Err.Error()+"\"}", 409)
+				return
+			} else if err != nil {
 				http.Error(w, "{\"error\":\"Internal Server Error!\"}", 500)
 				return
 			}
@@ -187,11 +195,13 @@ func (connector *Connector) registerFileRoutes() {
 					http.Error(w, "{\"error\":\"This file does not exist!\"}", 404)
 					return
 				}
+				file.Close()
 				// Check if destination file exists.
 				file, err = os.Open(newpath)
 				stat, err1 := file.Stat()
 				if (err == nil || os.IsExist(err1)) && stat != nil && !stat.IsDir() {
 					http.Error(w, "{\"error\":\"This file already exists!\"}", 405)
+					file.Close()
 					return
 				} else if stat != nil && stat.IsDir() {
 					newpath = joinPath(newpath, path.Base(oldpath))
@@ -199,7 +209,11 @@ func (connector *Connector) registerFileRoutes() {
 				// Move file if operation is mv.
 				if operation[0] == "mv" {
 					err := os.Rename(oldpath, newpath)
-					if err != nil {
+					if err != nil && err.(*os.LinkError).Err != nil && err.(*os.LinkError).Err.Error() ==
+						"The process cannot access the file because it is being used by another process." {
+						http.Error(w, "{\"error\":\""+err.(*os.LinkError).Err.Error()+"\"}", 409)
+						return
+					} else if err != nil {
 						http.Error(w, "{\"error\":\"Internal Server Error!\"}", 500)
 						return
 					}
