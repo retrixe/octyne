@@ -166,7 +166,7 @@ func (connector *Connector) registerRoutes() {
 	type serverResponse struct {
 		CPUUsage      int    `json:"cpuUsage"`
 		MemoryUsage   int    `json:"memoryUsage"`
-		TotalMemory   bool   `json:"totalMemory"`
+		TotalMemory   int    `json:"totalMemory"`
 		Uptime        int64  `json:"uptime"`
 		ServerVersion string `json:"serverVersion"`
 	}
@@ -177,7 +177,7 @@ func (connector *Connector) registerRoutes() {
 		}
 		// Get the server being accessed.
 		id := mux.Vars(r)["id"]
-		_, err := connector.Processes[id]
+		process, err := connector.Processes[id]
 		// In case the server doesn't exist.
 		if !err {
 			http.Error(w, "{\"error\":\"This server does not exist!\"}", 404)
@@ -216,10 +216,8 @@ func (connector *Connector) registerRoutes() {
 		} else if r.Method == "GET" {
 			// Get the PID of the process.
 			/*
-				proc := server.Process.Command.Process
-				if proc == nil || proc.Pid < 1 {
-				} // TODO: What if server process does not exist?
-
+				proc := process.Command.Process
+				if !(proc == nil || proc.Pid < 1) {
 				// Get CPU usage and memory usage of the process.
 				output, err := exec.Command("ps", "-p", fmt.Sprint(proc.Pid), "-o", "%cpu,%mem,cmd").Output()
 				if err != nil {
@@ -228,12 +226,13 @@ func (connector *Connector) registerRoutes() {
 					return
 				}
 				usage := strings.Split(string(output), "\n")[1]
+				}
 			*/
 
 			// Send a response.
-			// TODO: Send uptime and server version.
+			// TODO: Send server version.
 			res := serverResponse{
-				Uptime: 1,
+				Uptime: time.Now().UnixNano() - process.Uptime,
 			}
 			json.NewEncoder(w).Encode(res)
 		} else {

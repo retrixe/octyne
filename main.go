@@ -49,13 +49,18 @@ func main() {
 
 	// Listen.
 	log.Println("Listening to port 42069")
-	log.Fatal(http.ListenAndServe(":42069", handlers.CORS(
+	handler := handlers.CORS(
 		handlers.AllowedHeaders([]string{
 			"X-Requested-With", "Content-Type", "Authorization", "Username", "Password",
 		}),
 		handlers.AllowedMethods([]string{"GET", "POST", "PUT", "HEAD", "OPTIONS", "PATCH", "DELETE"}),
 		handlers.AllowedOrigins([]string{"*"}),
-	)(connector.Router)))
+	)(connector.Router)
+	if !config.HTTPS.Enabled {
+		log.Fatal(http.ListenAndServe(":42069", handler))
+	} else {
+		log.Fatal(http.ListenAndServeTLS(":42069", config.HTTPS.Cert, config.HTTPS.Key, handler))
+	}
 	// TODO: Move above logic to connector.go
 	// TODO: Add complete authentication logic with Redis support
 	// TODO: Complete all routes

@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Process ... Defines a process running in octyne.
@@ -21,6 +22,7 @@ type Process struct {
 	Input   *io.PipeWriter
 	Stdin   io.WriteCloser
 	Crashes int
+	Uptime  int64
 }
 
 // RunProcess ... Runs a process.
@@ -70,6 +72,7 @@ func (process *Process) StartProcess() error {
 		log.Println("Started server (" + name + ") with PID " + strconv.Itoa(command.Process.Pid))
 		process.SendConsoleOutput("[Octyne] Started server " + name)
 		process.Online = 1
+		process.Uptime = time.Now().UnixNano()
 	}
 	// Update and return.
 	process.Command = command
@@ -115,10 +118,12 @@ func (process *Process) MonitorProcess() error {
 	if process.Command.ProcessState.Success() || process.Online == 0 {
 		process.Online = 0
 		process.Crashes = 0
+		process.Uptime = 0
 		log.Println("Server (" + process.Name + ") has stopped.")
 		process.SendConsoleOutput("[Octyne] Server " + process.Name + " has stopped.")
 	} else {
 		process.Online = 2
+		process.Uptime = 0
 		process.Crashes++
 		process.SendConsoleOutput("[Octyne] Server " + process.Name + " has crashed!")
 		log.Println("Server (" + process.Name + ") has crashed!")

@@ -94,8 +94,7 @@ func (connector *Connector) registerFileRoutes() {
 	// DELETE /server/{id}/file?path=path
 	// PATCH /server/{id}/file?path=path
 	connector.Router.HandleFunc("/server/{id}/file", func(w http.ResponseWriter, r *http.Request) {
-		// TODO: Check with authenticator for GET method.
-		if !connector.Validate(w, r) && r.Method != "GET" {
+		if !connector.Validate(w, r) {
 			return
 		}
 		// Get the server being accessed.
