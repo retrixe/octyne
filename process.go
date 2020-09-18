@@ -36,6 +36,7 @@ func RunProcess(name string, config ServerConfig, connector *Connector) *Process
 		Output:       output,
 		Input:        input,
 		Crashes:      0,
+		Uptime:       0,
 	}
 	// Run the command.
 	process.StartProcess()
@@ -117,8 +118,8 @@ func (process *Process) MonitorProcess() error {
 	// Mark as offline appropriately.
 	if process.Command.ProcessState.Success() || process.Online == 0 {
 		process.Online = 0
-		process.Crashes = 0
 		process.Uptime = 0
+		process.Crashes = 0
 		log.Println("Server (" + process.Name + ") has stopped.")
 		process.SendConsoleOutput("[Octyne] Server " + process.Name + " has stopped.")
 	} else {
