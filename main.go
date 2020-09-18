@@ -38,9 +38,9 @@ func main() {
 
 	// Setup daemon connector.
 	connector := InitializeConnector(config)
-	if connector.Authenticator.Redis != nil {
-		defer connector.Authenticator.Redis.Close()
-	}
+	/* This defer never actually gets called, hence commented.
+	if connector.Authenticator.Redis != nil { defer connector.Authenticator.Redis.Close() }
+	*/
 
 	// Run processes, passing the daemon connector.
 	for _, name := range servers {
@@ -57,10 +57,14 @@ func main() {
 		handlers.AllowedOrigins([]string{"*"}),
 	)(connector.Router)
 	if !config.HTTPS.Enabled {
-		log.Fatal(http.ListenAndServe(":42069", handler))
+		err = http.ListenAndServe(":42069", handler)
 	} else {
-		log.Fatal(http.ListenAndServeTLS(":42069", config.HTTPS.Cert, config.HTTPS.Key, handler))
+		err = http.ListenAndServeTLS(":42069", config.HTTPS.Cert, config.HTTPS.Key, handler)
 	}
+	if connector.Authenticator.Redis != nil { // Close Redis if needed.
+		connector.Authenticator.Redis.Close()
+	}
+	log.Fatalln(err)
 	// TODO: Move above logic to connector.go
 	// TODO: Add complete authentication logic with Redis support
 	// TODO: Complete all routes

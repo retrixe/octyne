@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
@@ -59,8 +60,8 @@ func InitializeConnector(config Config) *Connector {
 		DELETE /server/{id}/file?path=path
 		PATCH /server/{id}/file (moving files, copying files and renaming them)
 
-		- GET /server/{id}/fileDownload?token=token (also a way to download as ZIP)
-		- POST /server/{id}/fileDownload?token=token (also a way to download as ZIP)
+		- POST /server/{id}/compress?path=path
+		- POST /server/{id}/decompress?path=path
 
 		POST /server/{id}/folder?path=path
 
@@ -164,6 +165,7 @@ func (connector *Connector) registerRoutes() {
 	// GET /server/{id}
 	// POST /server/{id}
 	type serverResponse struct {
+		Status        int    `json:"status"`
 		CPUUsage      int    `json:"cpuUsage"`
 		MemoryUsage   int    `json:"memoryUsage"`
 		TotalMemory   int    `json:"totalMemory"`
@@ -218,21 +220,26 @@ func (connector *Connector) registerRoutes() {
 			/*
 				proc := process.Command.Process
 				if !(proc == nil || proc.Pid < 1) {
-				// Get CPU usage and memory usage of the process.
-				output, err := exec.Command("ps", "-p", fmt.Sprint(proc.Pid), "-o", "%cpu,%mem,cmd").Output()
-				if err != nil {
-					http.Error(w, "{\"error\":\"Internal Server Error! Is `ps` installed?\"}", 500)
-					log.Println("Octyne requires ps on a Linux system to return statistics!")
-					return
-				}
-				usage := strings.Split(string(output), "\n")[1]
+					// Get CPU usage and memory usage of the process.
+					output, err := exec.Command("ps", "-p", fmt.Sprint(proc.Pid), "-o", "%cpu,%mem,cmd").Output()
+					if err != nil {
+						http.Error(w, "{\"error\":\"Internal Server Error! Is `ps` installed?\"}", 500)
+						log.Println("Octyne requires ps on a Linux system to return statistics!")
+						return
+					}
+					usage := strings.Split(string(output), "\n")[1]
 				}
 			*/
 
 			// Send a response.
 			// TODO: Send server version.
+			uptime := process.Uptime
+			if uptime > 0 {
+				uptime = time.Now().UnixNano() - process.Uptime
+			}
 			res := serverResponse{
-				Uptime: time.Now().UnixNano() - process.Uptime,
+				Status: process.Online,
+				Uptime: uptime,
 			}
 			json.NewEncoder(w).Encode(res)
 		} else {

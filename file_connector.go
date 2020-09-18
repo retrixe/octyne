@@ -43,8 +43,14 @@ func (connector *Connector) registerFileRoutes() {
 			http.Error(w, "{\"error\":\"This server does not exist!\"}", 404)
 			return
 		}
+		// Check if folder is in the server directory or not.
+		folderPath := joinPath(server.Directory, r.URL.Query().Get("path"))
+		if !strings.HasPrefix(folderPath, path.Clean(server.Directory)) {
+			http.Error(w, "{\"error\":\"The folder requested is outside the server!\"}", 403)
+			return
+		}
 		// Get list of files and folders in the directory.
-		folder, err1 := os.Open(joinPath(server.Directory, r.URL.Query().Get("path")))
+		folder, err1 := os.Open(folderPath)
 		defer folder.Close()
 		if err1 != nil {
 			http.Error(w, "{\"error\":\"This folder does not exist!\"}", 404)
@@ -105,9 +111,16 @@ func (connector *Connector) registerFileRoutes() {
 			http.Error(w, "{\"error\":\"This server does not exist!\"}", 404)
 			return
 		}
+		// Check if path is in the server directory or not.
+		filePath := joinPath(server.Directory, r.URL.Query().Get("path"))
+		if (r.Method == "GET" || r.Method == "POST" || r.Method == "DELETE") &&
+			!strings.HasPrefix(filePath, path.Clean(server.Directory)) {
+			http.Error(w, "{\"error\":\"The file requested is outside the server!\"}", 403)
+			return
+		}
 		if r.Method == "GET" {
 			// Get list of files and folders in the directory.
-			file, err := os.Open(joinPath(server.Directory, r.URL.Query().Get("path")))
+			file, err := os.Open(filePath)
 			stat, err1 := file.Stat()
 			if err != nil || err1 != nil {
 				http.Error(w, "{\"error\":\"This file does not exist!\"}", 404)
@@ -120,22 +133,21 @@ func (connector *Connector) registerFileRoutes() {
 			w.Header().Set("Content-Disposition", "attachment; filename="+stat.Name())
 			w.Header().Set("Content-Type", http.DetectContentType(buffer))
 			w.Header().Set("Content-Length", fmt.Sprint(stat.Size()))
-			file, _ = os.Open(joinPath(server.Directory, r.URL.Query().Get("path")))
+			file, _ = os.Open(filePath)
 			defer file.Close()
 			io.Copy(w, file)
 		} else if r.Method == "DELETE" {
 			// Check if the file exists.
-			file := joinPath(server.Directory, r.URL.Query().Get("path"))
-			if file == "/" {
+			if filePath == "/" {
 				http.Error(w, "{\"error\":\"This operation is dangerous and has been forbidden!\"}", 403)
 				return
 			}
-			_, err := os.Stat(file)
+			_, err := os.Stat(filePath)
 			if err != nil || os.IsNotExist(err) {
 				http.Error(w, "{\"error\":\"This file does not exist!\"}", 404)
 				return
 			}
-			err = os.RemoveAll(file)
+			err = os.RemoveAll(filePath)
 			if err != nil && err.(*os.PathError).Err != nil && err.(*os.PathError).Err.Error() ==
 				"The process cannot access the file because it is being used by another process." {
 				http.Error(w, "{\"error\":\""+err.(*os.PathError).Err.Error()+"\"}", 409)
@@ -185,7 +197,7 @@ func (connector *Connector) registerFileRoutes() {
 				newpath := joinPath(server.Directory, operation[2])
 				if !strings.HasPrefix(oldpath, path.Clean(server.Directory)) ||
 					!strings.HasPrefix(newpath, path.Clean(server.Directory)) {
-					http.Error(w, "{\"error\":\"The folder requested is outside the server!\"}", 403)
+					http.Error(w, "{\"error\":\"The files requested are outside the server!\"}", 403)
 					return
 				}
 				file, err := os.Open(oldpath)
@@ -257,6 +269,11 @@ func (connector *Connector) registerFileRoutes() {
 		if r.Method == "POST" {
 			// Check if the folder already exists.
 			file := joinPath(server.Directory, r.URL.Query().Get("path"))
+			// Check if folder is in the server directory or not.
+			if !strings.HasPrefix(file, path.Clean(server.Directory)) {
+				http.Error(w, "{\"error\":\"The folder requested is outside the server!\"}", 403)
+				return
+			}
 			_, err := os.Stat(file)
 			if !os.IsNotExist(err) {
 				http.Error(w, "{\"error\":\"This folder already exists!\"}", 400)
