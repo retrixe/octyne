@@ -81,7 +81,8 @@ func (a *Authenticator) Validate(w http.ResponseWriter, r *http.Request) bool {
 			return true
 		}
 	}
-	http.Error(w, "{\"error\": \"You are not authenticated to access this resource!\"}", 401)
+	http.Error(w, "{\"error\": \"You are not authenticated to access this resource!\"}",
+		http.StatusUnauthorized)
 	return false
 }
 

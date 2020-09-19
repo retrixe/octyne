@@ -40,25 +40,25 @@ func (connector *Connector) registerFileRoutes() {
 		server, err := connector.Processes[id]
 		// In case the server doesn't exist.
 		if !err {
-			http.Error(w, "{\"error\":\"This server does not exist!\"}", 404)
+			http.Error(w, "{\"error\":\"This server does not exist!\"}", http.StatusNotFound)
 			return
 		}
 		// Check if folder is in the server directory or not.
 		folderPath := joinPath(server.Directory, r.URL.Query().Get("path"))
 		if !strings.HasPrefix(folderPath, path.Clean(server.Directory)) {
-			http.Error(w, "{\"error\":\"The folder requested is outside the server!\"}", 403)
+			http.Error(w, "{\"error\":\"The folder requested is outside the server!\"}", http.StatusForbidden)
 			return
 		}
 		// Get list of files and folders in the directory.
 		folder, err1 := os.Open(folderPath)
-		defer folder.Close()
 		if err1 != nil {
-			http.Error(w, "{\"error\":\"This folder does not exist!\"}", 404)
+			http.Error(w, "{\"error\":\"This folder does not exist!\"}", http.StatusNotFound)
 			return
 		}
+		defer folder.Close()
 		contents, err2 := folder.Readdir(-1)
 		if err2 != nil {
-			http.Error(w, "{\"error\":\"This is not a folder!\"}", 400)
+			http.Error(w, "{\"error\":\"This is not a folder!\"}", http.StatusBadRequest)
 			return
 		}
 		// Send the response.
@@ -78,9 +78,9 @@ func (connector *Connector) registerFileRoutes() {
 				path := joinPath(server.Directory, r.URL.Query().Get("path"), value.Name())
 				file, err := os.Open(path)
 				if err == nil {
-					file.Read(buffer)
+					file.Read(buffer) // skipcq GSC-G104
 					mimeType = http.DetectContentType(buffer)
-					file.Close()
+					file.Close() // skipcq GSC-G104
 				}
 			}
 			toSend["contents"] = append(toSend["contents"], serverFilesResponse{
@@ -108,14 +108,14 @@ func (connector *Connector) registerFileRoutes() {
 		server, err := connector.Processes[id]
 		// In case the server doesn't exist.
 		if !err {
-			http.Error(w, "{\"error\":\"This server does not exist!\"}", 404)
+			http.Error(w, "{\"error\":\"This server does not exist!\"}", http.StatusNotFound)
 			return
 		}
 		// Check if path is in the server directory or not.
 		filePath := joinPath(server.Directory, r.URL.Query().Get("path"))
 		if (r.Method == "GET" || r.Method == "POST" || r.Method == "DELETE") &&
 			!strings.HasPrefix(filePath, path.Clean(server.Directory)) {
-			http.Error(w, "{\"error\":\"The file requested is outside the server!\"}", 403)
+			http.Error(w, "{\"error\":\"The file requested is outside the server!\"}", http.StatusForbidden)
 			return
 		}
 		if r.Method == "GET" {
@@ -123,13 +123,13 @@ func (connector *Connector) registerFileRoutes() {
 			file, err := os.Open(filePath)
 			stat, err1 := file.Stat()
 			if err != nil || err1 != nil {
-				http.Error(w, "{\"error\":\"This file does not exist!\"}", 404)
+				http.Error(w, "{\"error\":\"This file does not exist!\"}", http.StatusNotFound)
 				return
 			}
 			// Send the response.
 			buffer := make([]byte, 512)
-			file.Read(buffer)
-			file.Close()
+			file.Read(buffer) // skipcq GSC-G104
+			file.Close()      // skipcq GSC-G104
 			w.Header().Set("Content-Disposition", "attachment; filename="+stat.Name())
 			w.Header().Set("Content-Type", http.DetectContentType(buffer))
 			w.Header().Set("Content-Length", fmt.Sprint(stat.Size()))
@@ -139,30 +139,35 @@ func (connector *Connector) registerFileRoutes() {
 		} else if r.Method == "DELETE" {
 			// Check if the file exists.
 			if filePath == "/" {
-				http.Error(w, "{\"error\":\"This operation is dangerous and has been forbidden!\"}", 403)
+				http.Error(w, "{\"error\":\"This operation is dangerous and has been forbidden!\"}", http.StatusForbidden)
 				return
 			}
 			_, err := os.Stat(filePath)
 			if err != nil || os.IsNotExist(err) {
-				http.Error(w, "{\"error\":\"This file does not exist!\"}", 404)
+				http.Error(w, "{\"error\":\"This file does not exist!\"}", http.StatusNotFound)
 				return
 			}
 			err = os.RemoveAll(filePath)
 			if err != nil && err.(*os.PathError).Err != nil && err.(*os.PathError).Err.Error() ==
 				"The process cannot access the file because it is being used by another process." {
-				http.Error(w, "{\"error\":\""+err.(*os.PathError).Err.Error()+"\"}", 409)
+				http.Error(w, "{\"error\":\""+err.(*os.PathError).Err.Error()+"\"}", http.StatusConflict)
 				return
 			} else if err != nil {
-				http.Error(w, "{\"error\":\"Internal Server Error!\"}", 500)
+				http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
 				return
 			}
 			fmt.Fprint(w, "{\"success\":true}")
 		} else if r.Method == "POST" {
 			// Parse our multipart form, 100 << 20 specifies a maximum upload of 100 MB files.
-			r.ParseMultipartForm(100 << 20)
+			err := r.ParseMultipartForm(100 << 20)
+			if err != nil {
+				http.Error(w, "{\"error\":\"Invalid form sent!\"}", http.StatusBadRequest)
+				return
+			}
 			// FormFile returns the first file for the given key `upload`
 			file, meta, err := r.FormFile("upload")
 			if err != nil {
+				http.Error(w, "{\"error\":\"Invalid form sent!\"}", http.StatusBadRequest)
 				return
 			}
 			defer file.Close()
@@ -170,10 +175,10 @@ func (connector *Connector) registerFileRoutes() {
 			toWrite, err := os.Create(joinPath(server.Directory, r.URL.Query().Get("path"), meta.Filename))
 			stat, err1 := toWrite.Stat()
 			if err != nil {
-				http.Error(w, "{\"error\":\"Internal Server Error!\"}", 500)
+				http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
 				return
 			} else if err1 == nil && stat.IsDir() {
-				http.Error(w, "{\"error\":\"This is a folder!\"}", 400)
+				http.Error(w, "{\"error\":\"This is a folder!\"}", http.StatusBadRequest)
 				return
 			}
 			defer toWrite.Close()
@@ -183,12 +188,16 @@ func (connector *Connector) registerFileRoutes() {
 		} else if r.Method == "PATCH" {
 			// Get the request body to check the operation.
 			var body bytes.Buffer
-			body.ReadFrom(r.Body)
+			_, err := body.ReadFrom(r.Body)
+			if err != nil {
+				http.Error(w, "{\"error\":\"Failed to read body!\"}", http.StatusBadRequest)
+				return
+			}
 			operation := strings.Split(body.String(), "\n")
 			// Possible operations: mv, cp
 			if operation[0] == "mv" || operation[0] == "cp" {
 				if len(operation) != 3 {
-					http.Error(w, "{\"error\":\""+operation[0]+" operation requires two arguments!\"}", 405)
+					http.Error(w, "{\"error\":\""+operation[0]+" operation requires two arguments!\"}", http.StatusMethodNotAllowed)
 					return
 				}
 				// Check if original file exists.
@@ -197,22 +206,22 @@ func (connector *Connector) registerFileRoutes() {
 				newpath := joinPath(server.Directory, operation[2])
 				if !strings.HasPrefix(oldpath, path.Clean(server.Directory)) ||
 					!strings.HasPrefix(newpath, path.Clean(server.Directory)) {
-					http.Error(w, "{\"error\":\"The files requested are outside the server!\"}", 403)
+					http.Error(w, "{\"error\":\"The files requested are outside the server!\"}", http.StatusForbidden)
 					return
 				}
 				file, err := os.Open(oldpath)
 				_, err1 := file.Stat()
 				if err != nil || os.IsNotExist(err1) {
-					http.Error(w, "{\"error\":\"This file does not exist!\"}", 404)
+					http.Error(w, "{\"error\":\"This file does not exist!\"}", http.StatusNotFound)
 					return
 				}
-				file.Close()
+				file.Close() // skipcq GSC-G104
 				// Check if destination file exists.
 				file, err = os.Open(newpath)
 				stat, err1 := file.Stat()
 				if (err == nil || os.IsExist(err1)) && stat != nil && !stat.IsDir() {
-					http.Error(w, "{\"error\":\"This file already exists!\"}", 405)
-					file.Close()
+					http.Error(w, "{\"error\":\"This file already exists!\"}", http.StatusMethodNotAllowed)
+					defer file.Close()
 					return
 				} else if stat != nil && stat.IsDir() {
 					newpath = joinPath(newpath, path.Base(oldpath))
@@ -222,10 +231,10 @@ func (connector *Connector) registerFileRoutes() {
 					err := os.Rename(oldpath, newpath)
 					if err != nil && err.(*os.LinkError).Err != nil && err.(*os.LinkError).Err.Error() ==
 						"The process cannot access the file because it is being used by another process." {
-						http.Error(w, "{\"error\":\""+err.(*os.LinkError).Err.Error()+"\"}", 409)
+						http.Error(w, "{\"error\":\""+err.(*os.LinkError).Err.Error()+"\"}", http.StatusConflict)
 						return
 					} else if err != nil {
-						http.Error(w, "{\"error\":\"Internal Server Error!\"}", 500)
+						http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
 						return
 					}
 					fmt.Fprintf(w, "{\"success\":true}")
@@ -239,16 +248,16 @@ func (connector *Connector) registerFileRoutes() {
 					}
 					err := cmd.Run()
 					if err != nil || cmd.ProcessState.ExitCode() == 16 {
-						http.Error(w, "{\"error\":\"Internal Server Error!\"}", 500)
+						http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
 						return
 					}
 					fmt.Fprintf(w, "{\"success\":true}")
 				}
 			} else {
-				http.Error(w, "{\"error\":\"Invalid operation! Operations available: mv,cp\"}", 405)
+				http.Error(w, "{\"error\":\"Invalid operation! Operations available: mv,cp\"}", http.StatusMethodNotAllowed)
 			}
 		} else {
-			http.Error(w, "{\"error\":\"Only GET, POST, PATCH and DELETE are allowed!\"}", 405)
+			http.Error(w, "{\"error\":\"Only GET, POST, PATCH and DELETE are allowed!\"}", http.StatusMethodNotAllowed)
 		}
 	})
 
@@ -263,7 +272,7 @@ func (connector *Connector) registerFileRoutes() {
 		server, err := connector.Processes[id]
 		// In case the server doesn't exist.
 		if !err {
-			http.Error(w, "{\"error\":\"This server does not exist!\"}", 404)
+			http.Error(w, "{\"error\":\"This server does not exist!\"}", http.StatusNotFound)
 			return
 		}
 		if r.Method == "POST" {
@@ -271,23 +280,23 @@ func (connector *Connector) registerFileRoutes() {
 			file := joinPath(server.Directory, r.URL.Query().Get("path"))
 			// Check if folder is in the server directory or not.
 			if !strings.HasPrefix(file, path.Clean(server.Directory)) {
-				http.Error(w, "{\"error\":\"The folder requested is outside the server!\"}", 403)
+				http.Error(w, "{\"error\":\"The folder requested is outside the server!\"}", http.StatusForbidden)
 				return
 			}
 			_, err := os.Stat(file)
 			if !os.IsNotExist(err) {
-				http.Error(w, "{\"error\":\"This folder already exists!\"}", 400)
+				http.Error(w, "{\"error\":\"This folder already exists!\"}", http.StatusBadRequest)
 				return
 			}
 			// Create the folder.
 			err = os.Mkdir(file, os.ModePerm)
 			if err != nil {
-				http.Error(w, "{\"error\":\"Internal Server Error!\"}", 500)
+				http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
 				return
 			}
 			fmt.Fprintf(w, "{\"success\":true}")
 		} else {
-			http.Error(w, "{\"error\":\"Only POST is allowed!\"}", 405)
+			http.Error(w, "{\"error\":\"Only POST is allowed!\"}", http.StatusMethodNotAllowed)
 		}
 	})
 }

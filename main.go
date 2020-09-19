@@ -14,7 +14,7 @@ import (
 const OctyneVersion = "1.0.0-beta.1"
 
 func main() {
-	if len(os.Args) >= 2 && os.Args[1] == "--version" {
+	if len(os.Args) >= 2 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
 		println("octyne version " + OctyneVersion)
 		return
 	}
@@ -27,7 +27,10 @@ func main() {
 		panic("An error occurred while attempting to read config!\n" + err.Error())
 	}
 	contents, _ := ioutil.ReadAll(file)
-	json.Unmarshal(contents, &config)
+	err = json.Unmarshal(contents, &config)
+	if err != nil {
+		panic("An error occurred while attempting to read config!\n" + err.Error())
+	}
 
 	// Get a slice of server names.
 	servers := make([]string, 0, len(config.Servers))
@@ -62,7 +65,9 @@ func main() {
 		err = http.ListenAndServeTLS(":42069", config.HTTPS.Cert, config.HTTPS.Key, handler)
 	}
 	if connector.Authenticator.Redis != nil { // Close Redis if needed.
-		connector.Authenticator.Redis.Close()
+		if redisErr := connector.Authenticator.Redis.Close(); redisErr != nil {
+			println(redisErr)
+		}
 	}
 	log.Fatalln(err)
 	// TODO: Move above logic to connector.go

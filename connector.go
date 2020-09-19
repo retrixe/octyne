@@ -93,7 +93,7 @@ func (connector *Connector) AddProcess(process *Process) {
 			}
 			server.Console = server.Console + "\n" + m
 			for _, connection := range server.Clients {
-				connection.WriteMessage(websocket.TextMessage, []byte(m))
+				connection.WriteMessage(websocket.TextMessage, []byte(m)) // skipcq GSC-G104
 			}
 		}
 	})()
@@ -114,30 +114,30 @@ func (connector *Connector) registerRoutes() {
 		username := r.Header.Get("Username")
 		password := r.Header.Get("Password")
 		if username == "" || password == "" {
-			http.Error(w, "{\"error\":\"Username or password not provided!\"}", 400)
+			http.Error(w, "{\"error\":\"Username or password not provided!\"}", http.StatusBadRequest)
 			return
 		}
 		// Authorize the user.
 		token := connector.Login(username, password)
 		if token == "" {
-			http.Error(w, "{\"error\":\"Invalid username or password!\"}", 401)
+			http.Error(w, "{\"error\":\"Invalid username or password!\"}", http.StatusUnauthorized)
 			return
 		}
 		// Send the response.
-		json.NewEncoder(w).Encode(loginResponse{Token: token})
+		json.NewEncoder(w).Encode(loginResponse{Token: token}) // skipcq GSC-G104
 	})
 
 	connector.Router.HandleFunc("/logout", func(w http.ResponseWriter, r *http.Request) {
 		// In case the authorization header doesn't exist.
 		token := r.Header.Get("Authorization")
 		if token == "" {
-			http.Error(w, "{\"error\":\"Token not provided!\"}", 400)
+			http.Error(w, "{\"error\":\"Token not provided!\"}", http.StatusBadRequest)
 			return
 		}
 		// Authorize the user.
 		success := connector.Logout(token)
 		if !success {
-			http.Error(w, "{\"error\":\"Invalid token, failed to logout!\"}", 401)
+			http.Error(w, "{\"error\":\"Invalid token, failed to logout!\"}", http.StatusUnauthorized)
 			return
 		}
 		// Send the response.
@@ -159,7 +159,7 @@ func (connector *Connector) registerRoutes() {
 			servers[v.Name] = v.Online
 		}
 		// Send the list.
-		json.NewEncoder(w).Encode(serversResponse{Servers: servers})
+		json.NewEncoder(w).Encode(serversResponse{Servers: servers}) // skipcq GSC-G104
 	})
 
 	// GET /server/{id}
@@ -182,25 +182,29 @@ func (connector *Connector) registerRoutes() {
 		process, err := connector.Processes[id]
 		// In case the server doesn't exist.
 		if !err {
-			http.Error(w, "{\"error\":\"This server does not exist!\"}", 404)
+			http.Error(w, "{\"error\":\"This server does not exist!\"}", http.StatusNotFound)
 			return
 		}
 		// POST /server/{id}
 		if r.Method == "POST" {
 			// Get the request body to check whether the operation is to START or STOP.
 			var body bytes.Buffer
-			body.ReadFrom(r.Body)
+			_, err := body.ReadFrom(r.Body)
+			if err != nil {
+				http.Error(w, "{\"error\":\"Failed to read body!\"}", http.StatusBadRequest)
+				return
+			}
 			operation := strings.ToUpper(body.String())
 			// Check whether the operation is correct or not.
 			if operation == "START" {
 				// Start process if required.
 				if connector.Processes[id].Online != 1 {
-					connector.Processes[id].StartProcess()
+					err = connector.Processes[id].StartProcess()
 				}
 				// Send a response.
 				res := make(map[string]bool)
-				res["success"] = true
-				json.NewEncoder(w).Encode(res)
+				res["success"] = err == nil
+				json.NewEncoder(w).Encode(res) // skipcq GSC-G104
 			} else if operation == "STOP" {
 				// Stop process if required.
 				if connector.Processes[id].Online == 1 {
@@ -209,9 +213,9 @@ func (connector *Connector) registerRoutes() {
 				// Send a response.
 				res := make(map[string]bool)
 				res["success"] = true
-				json.NewEncoder(w).Encode(res)
+				json.NewEncoder(w).Encode(res) // skipcq GSC-G104
 			} else {
-				http.Error(w, "{\"error\":\"Invalid operation requested!\"}", 400)
+				http.Error(w, "{\"error\":\"Invalid operation requested!\"}", http.StatusBadRequest)
 				return
 			}
 			// GET /server/{id}
@@ -223,7 +227,8 @@ func (connector *Connector) registerRoutes() {
 					// Get CPU usage and memory usage of the process.
 					output, err := exec.Command("ps", "-p", fmt.Sprint(proc.Pid), "-o", "%cpu,%mem,cmd").Output()
 					if err != nil {
-						http.Error(w, "{\"error\":\"Internal Server Error! Is `ps` installed?\"}", 500)
+						http.Error(w, "{\"error\":\"Internal Server Error! Is `ps` installed?\"}",
+							http.StatusInternalServerError)
 						log.Println("Octyne requires ps on a Linux system to return statistics!")
 						return
 					}
@@ -241,9 +246,9 @@ func (connector *Connector) registerRoutes() {
 				Status: process.Online,
 				Uptime: uptime,
 			}
-			json.NewEncoder(w).Encode(res)
+			json.NewEncoder(w).Encode(res) // skipcq GSC-G104
 		} else {
-			http.Error(w, "{\"error\":\"Only GET and POST is allowed!\"}", 405)
+			http.Error(w, "{\"error\":\"Only GET and POST is allowed!\"}", http.StatusMethodNotAllowed)
 		}
 	})
 
@@ -268,7 +273,7 @@ func (connector *Connector) registerRoutes() {
 		process, exists := connector.Processes[id]
 		// In case the server doesn't exist.
 		if !exists {
-			http.Error(w, "{\"error\":\"This server does not exist!\"", 404)
+			http.Error(w, "{\"error\":\"This server does not exist!\"", http.StatusNotFound)
 			return
 		}
 		// Upgrade WebSocket connection.
@@ -292,6 +297,7 @@ func (connector *Connector) registerRoutes() {
 				}
 			*/
 			// Add connection to the process after sending current console output.
+			// Tell Deepsource it's okay to error here: skipcq GSC-G104
 			c.WriteMessage(websocket.TextMessage, []byte(process.Console)) // TODO: Consider Mutexes.
 			process.Clients[token] = c
 			// Read messages from the user and execute them.
