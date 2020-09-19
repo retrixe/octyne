@@ -97,7 +97,7 @@ func (a *Authenticator) Login(username string, password string) string {
 		panic("An error occurred while attempting to read users.json!\n" + err.Error())
 	}
 	contents, _ := ioutil.ReadAll(file)
-	json.Unmarshal(contents, &users)
+	json.Unmarshal(contents, &users) // Tolerate errors here: skipcq GSC-G104
 	// Check whether this user exists.
 	hashedPassword, exists := users[username]
 	if !exists || hashedPassword != sha256sum {
@@ -105,7 +105,7 @@ func (a *Authenticator) Login(username string, password string) string {
 	}
 	// Generate a token and return it.
 	token := make([]byte, 96)
-	rand.Read(token)
+	rand.Read(token) // Tolerate errors here, an error here is incredibly unlikely: skipcq GSC-G104
 	if a.Redis != nil {
 		conn := a.Redis.Get()
 		defer conn.Close()

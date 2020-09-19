@@ -39,7 +39,9 @@ func RunProcess(name string, config ServerConfig, connector *Connector) *Process
 		Uptime:       0,
 	}
 	// Run the command.
-	process.StartProcess()
+	if config.Enabled {
+		process.StartProcess() // Error is handled by StartProcess: skipcq GSC-G104
+	}
 	connector.AddProcess(process)
 	return process
 }

@@ -31,6 +31,7 @@ Used to configure the servers Octyne should start, Redis-based authentication fo
   },
   "servers": {
     "test1": { // each key has the name of the server
+      "enabled": true, // optional, default true, Octyne won't auto-start when false
       "directory": "/home/test/server", // the directory in which the server is located
       "command": "java -jar spigot-1.12.2.jar" // the command to run to start the server
     }

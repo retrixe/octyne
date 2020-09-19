@@ -91,7 +91,7 @@ func (connector *Connector) registerFileRoutes() {
 				MimeType:     mimeType,
 			})
 		}
-		json.NewEncoder(w).Encode(toSend)
+		json.NewEncoder(w).Encode(toSend) // skipcq GSC-G104
 	})
 
 	// GET /server/{id}/file?path=path
