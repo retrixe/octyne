@@ -11,7 +11,7 @@ import (
 )
 
 // OctyneVersion ... Last version of Octyne this code is based on.
-const OctyneVersion = "1.0.0-beta.1"
+const OctyneVersion = "1.0.0-beta.2"
 
 func main() {
 	if len(os.Args) >= 2 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
