@@ -6,12 +6,20 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/gorilla/handlers"
 )
 
 // OctyneVersion ... Last version of Octyne this code is based on.
 const OctyneVersion = "1.0.0-beta.2"
+
+func getPort(config Config) string {
+	if config.Port == 0 {
+		return ":40269"
+	}
+	return ":" + strconv.Itoa(int(config.Port))
+}
 
 func main() {
 	if len(os.Args) >= 2 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
@@ -60,9 +68,9 @@ func main() {
 		handlers.AllowedOrigins([]string{"*"}),
 	)(connector.Router)
 	if !config.HTTPS.Enabled {
-		err = http.ListenAndServe(":42069", handler)
+		err = http.ListenAndServe(getPort(config), handler)
 	} else {
-		err = http.ListenAndServeTLS(":42069", config.HTTPS.Cert, config.HTTPS.Key, handler)
+		err = http.ListenAndServeTLS(getPort(config), config.HTTPS.Cert, config.HTTPS.Key, handler)
 	}
 	if connector.Authenticator.Redis != nil { // Close Redis if needed.
 		if redisErr := connector.Authenticator.Redis.Close(); redisErr != nil {

@@ -20,6 +20,7 @@ Used to configure the servers Octyne should start, Redis-based authentication fo
 
 ```json
 {
+  "port": 42069, // optional, default is 42069
   "redis": {
     "enabled": false, // whether the authentication tokens should sync to Redis for more than 1 node
     "url": "redis://localhost" // link to Redis server

@@ -4,6 +4,7 @@ import "encoding/json"
 
 // Config ... The main config for Octyne.
 type Config struct {
+	Port    uint16                  `json:"port"`
 	HTTPS   HTTPSConfig             `json:"https"`
 	Redis   RedisConfig             `json:"redis"`
 	Servers map[string]ServerConfig `json:"servers"`
