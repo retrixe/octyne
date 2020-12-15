@@ -11,6 +11,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
+	"github.com/retrixe/octyne/system"
 )
 
 // An internal representation of Process along with the clients connected to it and its output.
@@ -165,13 +166,14 @@ func (connector *Connector) registerRoutes() {
 	// GET /server/{id}
 	// POST /server/{id}
 	type serverResponse struct {
-		Status        int    `json:"status"`
-		CPUUsage      int    `json:"cpuUsage"`
-		MemoryUsage   int    `json:"memoryUsage"`
-		TotalMemory   int    `json:"totalMemory"`
-		Uptime        int64  `json:"uptime"`
-		ServerVersion string `json:"serverVersion"`
+		Status        int     `json:"status"`
+		CPUUsage      float64 `json:"cpuUsage"`
+		MemoryUsage   float64 `json:"memoryUsage"`
+		TotalMemory   int64   `json:"totalMemory"`
+		Uptime        int64   `json:"uptime"`
+		ServerVersion string  `json:"serverVersion"`
 	}
+	totalMemory := int64(system.GetTotalSystemMemory())
 	connector.Router.HandleFunc("/server/{id}", func(w http.ResponseWriter, r *http.Request) {
 		// Check with authenticator.
 		if !connector.Validate(w, r) {
@@ -221,20 +223,20 @@ func (connector *Connector) registerRoutes() {
 			// GET /server/{id}
 		} else if r.Method == "GET" {
 			// Get the PID of the process.
-			/*
-				proc := process.Command.Process
-				if !(proc == nil || proc.Pid < 1) {
-					// Get CPU usage and memory usage of the process.
-					output, err := exec.Command("ps", "-p", fmt.Sprint(proc.Pid), "-o", "%cpu,%mem,cmd").Output()
-					if err != nil {
-						http.Error(w, "{\"error\":\"Internal Server Error! Is `ps` installed?\"}",
-							http.StatusInternalServerError)
-						log.Println("Octyne requires ps on a Linux system to return statistics!")
-						return
-					}
-					usage := strings.Split(string(output), "\n")[1]
+			var stat *system.SysInfo
+			if process.Command != nil && process.Command.Process != nil && process.Command.Process.Pid > 0 {
+				// Get CPU usage and memory usage of the process.
+				// output, err := exec.Command("ps", "-p", fmt.Sprint(proc.Pid), "-o", "%cpu,%mem,cmd").Output()
+				var err error
+				stat, err = system.GetStat(process.Command.Process.Pid) // TODO: Support Windows.
+				if err != nil {
+					// log.Println("Octyne requires ps on a Linux system to return statistics!")
+					http.Error(w, "{\"error\":\"Internal Server Error! Is `ps` installed?\"}",
+						http.StatusInternalServerError)
+					return
 				}
-			*/
+				// usage := strings.Split(string(output), "\n")[1]
+			}
 
 			// Send a response.
 			// TODO: Send server version.
@@ -243,8 +245,13 @@ func (connector *Connector) registerRoutes() {
 				uptime = time.Now().UnixNano() - process.Uptime
 			}
 			res := serverResponse{
-				Status: process.Online,
-				Uptime: uptime,
+				Status:      process.Online,
+				Uptime:      uptime,
+				TotalMemory: totalMemory,
+			}
+			if stat != nil {
+				res.CPUUsage = stat.CPU
+				res.MemoryUsage = stat.Memory
 			}
 			json.NewEncoder(w).Encode(res) // skipcq GSC-G104
 		} else {

@@ -16,7 +16,7 @@ const OctyneVersion = "1.0.0-beta.2"
 
 func getPort(config Config) string {
 	if config.Port == 0 {
-		return ":40269"
+		return ":42069"
 	}
 	return ":" + strconv.Itoa(int(config.Port))
 }
@@ -59,7 +59,8 @@ func main() {
 	}
 
 	// Listen.
-	log.Println("Listening to port 42069")
+	port := getPort(config)
+	log.Println("Listening to port " + port[1:])
 	handler := handlers.CORS(
 		handlers.AllowedHeaders([]string{
 			"X-Requested-With", "Content-Type", "Authorization", "Username", "Password",
@@ -68,9 +69,9 @@ func main() {
 		handlers.AllowedOrigins([]string{"*"}),
 	)(connector.Router)
 	if !config.HTTPS.Enabled {
-		err = http.ListenAndServe(getPort(config), handler)
+		err = http.ListenAndServe(port, handler)
 	} else {
-		err = http.ListenAndServeTLS(getPort(config), config.HTTPS.Cert, config.HTTPS.Key, handler)
+		err = http.ListenAndServeTLS(port, config.HTTPS.Cert, config.HTTPS.Key, handler)
 	}
 	if connector.Authenticator.Redis != nil { // Close Redis if needed.
 		if redisErr := connector.Authenticator.Redis.Close(); redisErr != nil {
