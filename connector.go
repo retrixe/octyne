@@ -3,6 +3,8 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -21,6 +23,13 @@ type server struct {
 	Console string
 }
 
+// Ticket ... A one-time ticket usable by browsers to quickly authenticate with the WebSocket API.
+type Ticket struct {
+	Time   int64
+	Token  string
+	IPAddr string
+}
+
 // Connector ...
 // A connector used by octyne to create an HTTP API to interact with integrations.
 type Connector struct {
@@ -29,6 +38,19 @@ type Connector struct {
 	*mux.Router
 	*websocket.Upgrader
 	Processes map[string]*server
+	Tickets   map[string]Ticket
+}
+
+// GetIP ... Gets an IP address from http.Request.RemoteAddr.
+func GetIP(r *http.Request) string {
+	if r.Header.Get("x-forwarded-for") != "" {
+		return strings.Split(r.Header.Get("x-forwarded-for"), ", ")[0]
+	}
+	index := strings.LastIndex(r.RemoteAddr, ":")
+	if index == -1 {
+		return r.RemoteAddr
+	}
+	return r.RemoteAddr[:index]
 }
 
 // InitializeConnector ... Initialize a connector to create an HTTP API for interaction.
@@ -38,6 +60,7 @@ func InitializeConnector(config Config) *Connector {
 		Config:        config,
 		Router:        mux.NewRouter().StrictSlash(true),
 		Processes:     make(map[string]*server),
+		Tickets:       make(map[string]Ticket),
 		Authenticator: InitializeAuthenticator(config),
 		Upgrader:      &websocket.Upgrader{},
 	}
@@ -48,15 +71,16 @@ func InitializeConnector(config Config) *Connector {
 		GET /logout
 
 		GET /servers
+		GET /ott (one-time ticket)
 
 		- GET /server/{id} (FTP info, statistics e.g. server version, players online, uptime, CPU and RAM)
 		POST /server/{id} (to start and stop a server)
 
-		WS /server/{id}/console
+		WS /server/{id}/console?ticket=ticket
 
 		GET /server/{id}/files?path=path
 
-		GET /server/{id}/file?path=path
+		GET /server/{id}/file?path=path&ticket=ticket
 		POST /server/{id}/file?path=path (takes a form file with the file name, path= is path to folder)
 		DELETE /server/{id}/file?path=path
 		PATCH /server/{id}/file (moving files, copying files and renaming them)
@@ -163,6 +187,32 @@ func (connector *Connector) registerRoutes() {
 		json.NewEncoder(w).Encode(serversResponse{Servers: servers}) // skipcq GSC-G104
 	})
 
+	// GET /ott
+	connector.Router.HandleFunc("/ott", func(w http.ResponseWriter, r *http.Request) {
+		// Check with authenticator.
+		if !connector.Validate(w, r) {
+			return
+		}
+		// Add a ticket.
+		ticket := make([]byte, 4)
+		rand.Read(ticket)
+		ticketString := base64.StdEncoding.EncodeToString(ticket)
+		connector.Tickets[ticketString] = Ticket{
+			Time:   time.Now().Unix(),
+			Token:  r.Header.Get("Authorization"),
+			IPAddr: GetIP(r),
+		}
+		// Schedule deletion (cancellable).
+		go (func() {
+			<-time.After(2 * time.Minute)
+			if _, exists := connector.Tickets[ticketString]; exists == true {
+				delete(connector.Tickets, ticketString)
+			}
+		})()
+		// Send the response.
+		fmt.Fprint(w, "{\"ticket\": \""+ticketString+"\"}")
+	})
+
 	// GET /server/{id}
 	// POST /server/{id}
 	type serverResponse struct {
@@ -263,13 +313,17 @@ func (connector *Connector) registerRoutes() {
 	connector.Upgrader.CheckOrigin = func(r *http.Request) bool { return true }
 	connector.Router.HandleFunc("/server/{id}/console", func(w http.ResponseWriter, r *http.Request) {
 		// Check with authenticator.
-		// TODO: Need to figure out how to impl. WS authentication.
-		if !connector.Validate(w, r) {
+		t, e := connector.Tickets[r.URL.Query().Get("ticket")]
+		if e && t.IPAddr == GetIP(r) {
+			delete(connector.Tickets, r.URL.Query().Get("ticket"))
+		} else if !connector.Validate(w, r) {
 			return
 		}
 		// Retrieve the token.
 		token := r.Header.Get("Authorization")
-		if r.Header.Get("Cookie") != "" && token == "" {
+		if e {
+			token = t.Token
+		} else if r.Header.Get("Cookie") != "" && token == "" {
 			cookie, exists := r.Cookie("X-Authentication")
 			if exists == nil {
 				token = cookie.Value
@@ -287,22 +341,6 @@ func (connector *Connector) registerRoutes() {
 		c, err := connector.Upgrade(w, r, nil)
 		if err == nil {
 			defer c.Close()
-			// TODO: Wait for a message containing the token and then check if the token is valid.
-			/*
-				auth := false
-				_, m, err := c.ReadMessage()
-				if err != nil {
-					return
-				}
-				for _, value := range connector.Authenticator.Tokens {
-					if value == string(m) && value != "" {
-						auth = true
-					}
-				}
-				if !auth {
-					return
-				}
-			*/
 			// Add connection to the process after sending current console output.
 			// Tell Deepsource it's okay to error here: skipcq GSC-G104
 			c.WriteMessage(websocket.TextMessage, []byte(process.Console)) // TODO: Consider Mutexes.

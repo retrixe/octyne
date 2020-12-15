@@ -79,7 +79,4 @@ func main() {
 		}
 	}
 	log.Fatalln(err)
-	// TODO: Move above logic to connector.go
-	// TODO: Add complete authentication logic with Redis support
-	// TODO: Complete all routes
 }

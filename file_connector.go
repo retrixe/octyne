@@ -94,13 +94,15 @@ func (connector *Connector) registerFileRoutes() {
 		json.NewEncoder(w).Encode(toSend) // skipcq GSC-G104
 	})
 
-	// GET /server/{id}/file?path=path
+	// GET /server/{id}/file?path=path&ticket=ticket
 	// DOWNLOAD /server/{id}/file?path=path
 	// POST /server/{id}/file?path=path
 	// DELETE /server/{id}/file?path=path
 	// PATCH /server/{id}/file?path=path
 	connector.Router.HandleFunc("/server/{id}/file", func(w http.ResponseWriter, r *http.Request) {
-		if !connector.Validate(w, r) {
+		if t, e := connector.Tickets[r.URL.Query().Get("ticket")]; e && r.Method == "GET" && t.IPAddr == GetIP(r) {
+			delete(connector.Tickets, r.URL.Query().Get("ticket"))
+		} else if !connector.Validate(w, r) {
 			return
 		}
 		// Get the server being accessed.
