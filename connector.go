@@ -85,8 +85,8 @@ func InitializeConnector(config Config) *Connector {
 		DELETE /server/{id}/file?path=path
 		PATCH /server/{id}/file (moving files, copying files and renaming them)
 
-		- POST /server/{id}/compress?path=path
-		- POST /server/{id}/decompress?path=path
+		POST /server/{id}/compress?path=path&compress=true/false (compress is optional, default: true)
+		POST /server/{id}/decompress?path=path
 
 		POST /server/{id}/folder?path=path
 
@@ -205,7 +205,7 @@ func (connector *Connector) registerRoutes() {
 		// Schedule deletion (cancellable).
 		go (func() {
 			<-time.After(2 * time.Minute)
-			if _, exists := connector.Tickets[ticketString]; exists == true {
+			if _, exists := connector.Tickets[ticketString]; exists {
 				delete(connector.Tickets, ticketString)
 			}
 		})()
@@ -273,35 +273,29 @@ func (connector *Connector) registerRoutes() {
 			// GET /server/{id}
 		} else if r.Method == "GET" {
 			// Get the PID of the process.
-			var stat *system.SysInfo
+			var stat system.ProcessStats
 			if process.Command != nil && process.Command.Process != nil && process.Command.Process.Pid > 0 {
 				// Get CPU usage and memory usage of the process.
-				// output, err := exec.Command("ps", "-p", fmt.Sprint(proc.Pid), "-o", "%cpu,%mem,cmd").Output()
 				var err error
-				stat, err = system.GetStat(process.Command.Process.Pid) // TODO: Support Windows.
+				stat, err = system.GetProcessStats(process.Command.Process.Pid)
 				if err != nil {
-					// log.Println("Octyne requires ps on a Linux system to return statistics!")
 					http.Error(w, "{\"error\":\"Internal Server Error! Is `ps` installed?\"}",
 						http.StatusInternalServerError)
 					return
 				}
-				// usage := strings.Split(string(output), "\n")[1]
 			}
 
 			// Send a response.
-			// TODO: Send server version.
 			uptime := process.Uptime
 			if uptime > 0 {
 				uptime = time.Now().UnixNano() - process.Uptime
 			}
-			res := serverResponse{
+			res := serverResponse{ // TODO: Send server version.
 				Status:      process.Online,
 				Uptime:      uptime,
+				CPUUsage:    stat.CPUUsage,
+				MemoryUsage: stat.RSSMemory,
 				TotalMemory: totalMemory,
-			}
-			if stat != nil {
-				res.CPUUsage = stat.CPU
-				res.MemoryUsage = stat.Memory
 			}
 			json.NewEncoder(w).Encode(res) // skipcq GSC-G104
 		} else {

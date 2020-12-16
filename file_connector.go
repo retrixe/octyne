@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/gorilla/mux"
+	"github.com/retrixe/octyne/system"
 )
 
 // joinPath joins any number of path elements into a single path, adding a separating slash if necessary.
@@ -212,7 +214,7 @@ func (connector *Connector) registerFileRoutes() {
 					return
 				}
 				file, err := os.Open(oldpath)
-				_, err1 := file.Stat()
+				fileStat, err1 := file.Stat()
 				if err != nil || os.IsNotExist(err1) {
 					http.Error(w, "{\"error\":\"This file does not exist!\"}", http.StatusNotFound)
 					return
@@ -241,15 +243,21 @@ func (connector *Connector) registerFileRoutes() {
 					}
 					fmt.Fprintf(w, "{\"success\":true}")
 				} else {
-					var cmd *exec.Cmd
-					// TODO: Needs to be looked into, whether or not it actually works.
-					if runtime.GOOS == "windows" {
-						cmd = exec.Command("robocopy", oldpath, newpath)
+					var failed bool
+					if fileStat.IsDir() {
+						var cmd *exec.Cmd
+						if runtime.GOOS == "windows" {
+							cmd = exec.Command("robocopy", oldpath, newpath) // TODO: Fix this or use pure Go impl.
+						} else {
+							cmd = exec.Command("cp", "-r", oldpath, newpath)
+						}
+						err := cmd.Run()
+						failed = err != nil || cmd.ProcessState.ExitCode() == 16
 					} else {
-						cmd = exec.Command("cp", "-r", oldpath, newpath)
+						err := system.CopyFile(oldpath, newpath)
+						failed = err != nil
 					}
-					err := cmd.Run()
-					if err != nil || cmd.ProcessState.ExitCode() == 16 {
+					if failed {
 						http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
 						return
 					}
@@ -294,6 +302,148 @@ func (connector *Connector) registerFileRoutes() {
 			err = os.Mkdir(file, os.ModePerm)
 			if err != nil {
 				http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
+				return
+			}
+			fmt.Fprintf(w, "{\"success\":true}")
+		} else {
+			http.Error(w, "{\"error\":\"Only POST is allowed!\"}", http.StatusMethodNotAllowed)
+		}
+	})
+
+	// POST /server/{id}/compress?path=path&compress=true/false (compress is optional, default: true)
+	connector.Router.HandleFunc("/server/{id}/compress", func(w http.ResponseWriter, r *http.Request) {
+		// Check with authenticator.
+		if !connector.Validate(w, r) {
+			return
+		}
+		// Get the server being accessed.
+		id := mux.Vars(r)["id"]
+		server, err := connector.Processes[id]
+		// In case the server doesn't exist.
+		if !err {
+			http.Error(w, "{\"error\":\"This server does not exist!\"}", http.StatusNotFound)
+			return
+		}
+		if r.Method == "POST" {
+			// Get the body.
+			var buffer bytes.Buffer
+			buffer.ReadFrom(r.Body)
+			// Decode the array body and send it to files.
+			var files []string
+			json.Unmarshal(buffer.Bytes(), &files)
+			// Validate every path.
+			for _, file := range files {
+				filepath := joinPath(server.Directory, file)
+				if !strings.HasPrefix(filepath, path.Clean(server.Directory)) {
+					http.Error(w, "{\"error\":\"One of the paths provided is outside the server directory!\"}", http.StatusForbidden)
+					return
+				} else if _, err := os.Stat(filepath); err != nil {
+					if os.IsNotExist(err) {
+						http.Error(w, "{\"error\":\"The file "+file+" does not exist!\"}", http.StatusBadRequest)
+					} else {
+						http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
+					}
+					return
+				}
+			}
+			// Check if a file exists at the location of the ZIP file.
+			zipPath := joinPath(server.Directory, r.URL.Query().Get("path"))
+			if !strings.HasPrefix(zipPath, path.Clean(server.Directory)) {
+				http.Error(w, "{\"error\":\"The requested ZIP file is outside the server directory!\"}", http.StatusForbidden)
+				return
+			}
+			_, exists := os.Stat(zipPath)
+			if !os.IsNotExist(exists) {
+				http.Error(w, "{\"error\":\"A file already exists at the path of requested ZIP!\"}", http.StatusBadRequest)
+				return
+			} else if exists != nil {
+				http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
+				return
+			}
+
+			// Begin compressing a ZIP.
+			zipFile, err := os.Create(zipPath)
+			if err != nil {
+				http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
+				return
+			}
+			defer zipFile.Close()
+			archive := zip.NewWriter(zipFile)
+			defer archive.Close()
+			// Archive stuff inside.
+			for _, file := range files {
+				err := system.AddFileToZip(archive, server.Directory, file, r.Header.Get("compress") != "false")
+				if err != nil {
+					http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
+					return
+				}
+			}
+			fmt.Fprintf(w, "{\"success\":true}")
+		} else {
+			http.Error(w, "{\"error\":\"Only POST is allowed!\"}", http.StatusMethodNotAllowed)
+		}
+	})
+
+	// POST /server/{id}/decompress?path=path
+	connector.Router.HandleFunc("/server/{id}/decompress", func(w http.ResponseWriter, r *http.Request) {
+		// Check with authenticator.
+		if !connector.Validate(w, r) {
+			return
+		}
+		// Get the server being accessed.
+		id := mux.Vars(r)["id"]
+		server, err := connector.Processes[id]
+		// In case the server doesn't exist.
+		if !err {
+			http.Error(w, "{\"error\":\"This server does not exist!\"}", http.StatusNotFound)
+			return
+		}
+		directory := path.Clean(server.Directory)
+		if r.Method == "POST" {
+			// Check if the ZIP file exists.
+			zipPath := joinPath(directory, r.URL.Query().Get("path"))
+			if !strings.HasPrefix(zipPath, path.Clean(server.Directory)) {
+				http.Error(w, "{\"error\":\"The ZIP file is outside the server directory!\"}", http.StatusForbidden)
+				return
+			}
+			_, exists := os.Stat(zipPath)
+			if os.IsNotExist(exists) {
+				http.Error(w, "{\"error\":\"The requested ZIP does not exist!\"}", http.StatusBadRequest)
+				return
+			} else if exists != nil {
+				http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
+				return
+			}
+			// Check if there is a file/folder at the destination.
+			var body bytes.Buffer
+			_, err := body.ReadFrom(r.Body)
+			if err != nil {
+				http.Error(w, "{\"error\":\"Failed to read body!\"}", http.StatusBadRequest)
+				return
+			}
+			unpackPath := joinPath(server.Directory, body.String())
+			if !strings.HasPrefix(unpackPath, path.Clean(server.Directory)) {
+				http.Error(w, "{\"error\":\"The ZIP file is outside the server directory!\"}", http.StatusForbidden)
+				return
+			}
+			stat, exists := os.Stat(unpackPath)
+			if os.IsNotExist(exists) {
+				err := os.Mkdir(unpackPath, os.ModePerm)
+				if err != nil {
+					http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
+					return
+				}
+			} else if exists != nil {
+				http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
+				return
+			} else if !stat.IsDir() {
+				http.Error(w, "{\"error\":\"There is a file at the requested unpack destination!\"}", http.StatusBadRequest)
+				return
+			}
+			// Decompress the ZIP.
+			err = system.UnzipFile(zipPath, unpackPath)
+			if err != nil {
+				http.Error(w, "{\"error\":\"An error occurred while unzipping!\"}", http.StatusInternalServerError)
 				return
 			}
 			fmt.Fprintf(w, "{\"success\":true}")

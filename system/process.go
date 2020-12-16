@@ -1,0 +1,69 @@
+package system
+
+import (
+	"log"
+	"os/exec"
+	"runtime"
+	"strconv"
+	"strings"
+)
+
+// ProcessStats ... Statistics of a process.
+type ProcessStats struct {
+	CPUUsage  float64
+	RSSMemory float64
+}
+
+// GetProcessStats ... Get the stats of a process.
+func GetProcessStats(pid int) (ProcessStats, error) {
+	cmd := "pcpu,rss,cmd"
+	if runtime.GOOS == "aix" {
+		cmd = "pcpu,rssize,cmd"
+	} else if runtime.GOOS == "linux" {
+		info, err := GetStat(pid)
+		if err != nil {
+			return ProcessStats{}, err
+		}
+		return ProcessStats{
+			CPUUsage:  info.CPU,
+			RSSMemory: info.Memory,
+		}, nil
+	} else if runtime.GOOS == "windows" { // TODO: Support Windows.
+		return ProcessStats{
+			CPUUsage:  0,
+			RSSMemory: 0,
+		}, nil
+	}
+	output, err := exec.Command("ps", "-p", strconv.Itoa(pid), "-o", cmd).Output()
+	if err != nil {
+		_, ok := err.(*exec.Error)
+		if ok {
+			log.Println("Octyne requires ps on a Linux system to return statistics!")
+		}
+		return ProcessStats{}, err
+	}
+
+	usage := strings.Split(strings.Split(string(output), "\n")[1], " ")
+	var cpuUsage, rssMemory float64
+	cpuFound := false
+	for _, stat := range usage {
+		if stat != "" && !cpuFound {
+			cpuUsage, err = strconv.ParseFloat(stat, 64)
+			cpuFound = true
+			if err != nil {
+				return ProcessStats{}, err
+			}
+		} else if stat != "" {
+			rssMemory, err = strconv.ParseFloat(stat, 64)
+			if err != nil {
+				return ProcessStats{}, err
+			}
+			break
+		}
+	}
+
+	return ProcessStats{
+		CPUUsage:  cpuUsage,
+		RSSMemory: rssMemory,
+	}, nil
+}
