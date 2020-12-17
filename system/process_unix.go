@@ -1,3 +1,5 @@
+// +build !windows,linux
+
 package system
 
 import (
@@ -19,20 +21,6 @@ func GetProcessStats(pid int) (ProcessStats, error) {
 	cmd := "pcpu,rss,cmd"
 	if runtime.GOOS == "aix" {
 		cmd = "pcpu,rssize,cmd"
-	} else if runtime.GOOS == "linux" {
-		info, err := GetStat(pid)
-		if err != nil {
-			return ProcessStats{}, err
-		}
-		return ProcessStats{
-			CPUUsage:  info.CPU,
-			RSSMemory: info.Memory,
-		}, nil
-	} else if runtime.GOOS == "windows" { // TODO: Support Windows.
-		return ProcessStats{
-			CPUUsage:  0,
-			RSSMemory: 0,
-		}, nil
 	}
 	output, err := exec.Command("ps", "-p", strconv.Itoa(pid), "-o", cmd).Output()
 	if err != nil {

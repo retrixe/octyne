@@ -244,15 +244,15 @@ func (connector *Connector) registerFileRoutes() {
 					fmt.Fprintf(w, "{\"success\":true}")
 				} else {
 					var failed bool
-					if fileStat.IsDir() {
+					if fileStat.IsDir() { // TODO: Not robust, write a better Copy implementation.
 						var cmd *exec.Cmd
 						if runtime.GOOS == "windows" {
-							cmd = exec.Command("robocopy", oldpath, newpath) // TODO: Fix this or use pure Go impl.
+							cmd = exec.Command("robocopy", oldpath, newpath, "/E")
 						} else {
 							cmd = exec.Command("cp", "-r", oldpath, newpath)
 						}
 						err := cmd.Run()
-						failed = err != nil || cmd.ProcessState.ExitCode() == 16
+						failed = err != nil && (runtime.GOOS != "windows" || cmd.ProcessState.ExitCode() != 1)
 					} else {
 						err := system.CopyFile(oldpath, newpath)
 						failed = err != nil

@@ -18,20 +18,20 @@ func CopyFile(path string, dest string) error {
 
 	// Open path.
 	file, err := os.Open(path)
-	defer file.Close()
 	if err != nil {
 		return err
 	}
+	defer file.Close()
 
 	// Create dest.
-	copy, err := os.Create(dest)
+	destFile, err := os.Create(dest)
 	if err != nil {
 		return err
 	}
-	defer copy.Close()
+	defer destFile.Close()
 
 	// Copy from file to copy.
-	_, err = io.Copy(copy, file)
+	_, err = io.Copy(destFile, file)
 	if err != nil {
 		return err
 	}

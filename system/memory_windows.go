@@ -7,33 +7,25 @@ import (
 	"unsafe"
 )
 
-// Extracted from https://github.com/pbnjay/memory which is licensed under BSD 3-Clause.
-
-// omitting a few fields for brevity...
-// https://msdn.microsoft.com/en-us/library/windows/desktop/aa366589(v=vs.85).aspx
-type memStatusEx struct {
+// https://docs.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-globalmemorystatusex
+type memoryStatusEx struct {
 	dwLength     uint32
 	dwMemoryLoad uint32
 	ullTotalPhys uint64
-	unused       [6]uint64
+	unused       [6]uint64 // Contains omitted fields.
 }
 
+// GetTotalSystemMemory ...  Get the total system memory in the current system.
 func GetTotalSystemMemory() uint64 {
-	kernel32, err := syscall.LoadDLL("kernel32.dll")
-	if err != nil {
-		return 0
-	}
-	// GetPhysicallyInstalledSystemMemory is simpler, but broken on
-	// older versions of windows (and uses this under the hood anyway).
-	globalMemoryStatusEx, err := kernel32.FindProc("GlobalMemoryStatusEx")
-	if err != nil {
-		return 0
-	}
-	msx := &memStatusEx{
+	kernel32 := syscall.NewLazyDLL("kernel32.dll")
+	// GetPhysicallyInstalledSystemMemory returns physically installed, not available, RAM.
+	// It is also not available on older versions of Windows (however this is not supported).
+	globalMemoryStatusEx := kernel32.NewProc("GlobalMemoryStatusEx")
+	msx := &memoryStatusEx{
 		dwLength: 64,
 	}
-	r, _, _ := globalMemoryStatusEx.Call(uintptr(unsafe.Pointer(msx)))
-	if r == 0 {
+	res, _, _ := globalMemoryStatusEx.Call(uintptr(unsafe.Pointer(msx)))
+	if res == 0 {
 		return 0
 	}
 	return msx.ullTotalPhys

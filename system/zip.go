@@ -16,12 +16,12 @@ func joinPath(elem ...string) string {
 // UnzipFile ... Unzips a file to a location.
 func UnzipFile(zipFile string, location string) error {
 	r, err := zip.OpenReader(zipFile)
-	defer r.Close()
 	if err != nil {
 		return err
 	}
+	defer r.Close()
 	for _, f := range r.File {
-		fpath := filepath.Join(location, f.Name)
+		fpath := filepath.Join(location, f.Name) // skipcq GSC-G305
 
 		// Check for ZipSlip. More Info: http://bit.ly/2MsjAWE
 		if !strings.HasPrefix(fpath, filepath.Clean(location)+string(os.PathSeparator)) {
@@ -77,7 +77,7 @@ func AddFileToZip(archive *zip.Writer, dir string, file string, compress bool) e
 	// to preserve the folder structure we can overwrite this with the full path.
 	header.Name = file
 	// Change to deflate to gain better compression.
-	if compress == true {
+	if compress {
 		header.Method = zip.Deflate
 	}
 	writer, err := archive.CreateHeader(header)

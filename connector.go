@@ -205,9 +205,7 @@ func (connector *Connector) registerRoutes() {
 		// Schedule deletion (cancellable).
 		go (func() {
 			<-time.After(2 * time.Minute)
-			if _, exists := connector.Tickets[ticketString]; exists {
-				delete(connector.Tickets, ticketString)
-			}
+			delete(connector.Tickets, ticketString)
 		})()
 		// Send the response.
 		fmt.Fprint(w, "{\"ticket\": \""+ticketString+"\"}")
