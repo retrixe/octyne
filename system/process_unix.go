@@ -26,7 +26,7 @@ func GetProcessStats(pid int) (ProcessStats, error) {
 	if err != nil {
 		_, ok := err.(*exec.Error)
 		if ok {
-			log.Println("Octyne requires ps on a Linux system to return statistics!")
+			log.Println("Octyne requires ps on a non-Linux/Windows OS to return statistics!")
 		}
 		return ProcessStats{}, err
 	}
