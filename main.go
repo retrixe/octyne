@@ -12,7 +12,7 @@ import (
 )
 
 // OctyneVersion ... Last version of Octyne this code is based on.
-const OctyneVersion = "1.0.0-beta.2"
+const OctyneVersion = "1.0.0"
 
 func getPort(config Config) string {
 	if config.Port == 0 {
