@@ -8,7 +8,7 @@ import (
 	"syscall"
 )
 
-// GetTotalSystemMemory ...  Get the total system memory in the current system.
+// GetTotalSystemMemory gets the total system memory in the current system.
 func GetTotalSystemMemory() uint64 {
 	name := "hw.memsize"
 	if runtime.GOOS != "darwin" {

@@ -15,7 +15,7 @@ type memoryStatusEx struct {
 	unused       [6]uint64 // Contains omitted fields.
 }
 
-// GetTotalSystemMemory ...  Get the total system memory in the current system.
+// GetTotalSystemMemory gets the total system memory in the current system.
 func GetTotalSystemMemory() uint64 {
 	kernel32 := syscall.NewLazyDLL("kernel32.dll")
 	// GetPhysicallyInstalledSystemMemory returns physically installed, not available, RAM.

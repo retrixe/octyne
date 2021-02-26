@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// Process ... Defines a process running in octyne.
+// Process defines a process running in octyne.
 type Process struct {
 	ServerConfig
 	Name    string
@@ -25,8 +25,8 @@ type Process struct {
 	Uptime  int64
 }
 
-// RunProcess ... Runs a process.
-func RunProcess(name string, config ServerConfig, connector *Connector) *Process {
+// CreateProcess creates and runs a process.
+func CreateProcess(name string, config ServerConfig, connector *Connector) *Process {
 	// Create the process.
 	output, input := io.Pipe()
 	process := &Process{
@@ -46,7 +46,7 @@ func RunProcess(name string, config ServerConfig, connector *Connector) *Process
 	return process
 }
 
-// StartProcess ... Starts the process.
+// StartProcess starts the process.
 func (process *Process) StartProcess() error {
 	name := process.Name
 	log.Println("Starting server (" + name + ")")
@@ -83,7 +83,7 @@ func (process *Process) StartProcess() error {
 	return err
 }
 
-// StopProcess ... Stops the process.
+// StopProcess stops the process.
 func (process *Process) StopProcess() {
 	log.Println("Stopping server (" + process.Name + ")")
 	process.SendConsoleOutput("[Octyne] Stopping server " + process.Name)
@@ -94,17 +94,17 @@ func (process *Process) StopProcess() {
 	process.SendConsoleOutput("[Octyne] Stopped server " + process.Name)
 }
 
-// SendCommand ... Sends an input to stdin of the process.
+// SendCommand sends an input to stdin of the process.
 func (process *Process) SendCommand(command string) {
 	fmt.Fprintln(process.Stdin, command)
 }
 
-// SendConsoleOutput ... Sends console output to the stdout of the process.
+// SendConsoleOutput sends console output to the stdout of the process.
 func (process *Process) SendConsoleOutput(command string) {
 	go fmt.Fprintln(process.Input, command)
 }
 
-// MonitorProcess ... Monitors the process and automatically marks it as offline/online.
+// MonitorProcess monitors the process and automatically marks it as offline/online.
 func (process *Process) MonitorProcess() error {
 	defer (func() {
 		if e := recover(); e != nil {

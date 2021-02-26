@@ -15,14 +15,14 @@ import (
 	"github.com/gomodule/redigo/redis"
 )
 
-// Authenticator ... Used by Octyne's Connector to provide authentication to the HTTP API.
+// Authenticator is used by Octyne's Connector to provide HTTP API authentication.
 type Authenticator struct { // An interface would be better, implemented by two authenticators.
 	Config
 	Redis  *redis.Pool
 	Tokens []string
 }
 
-// InitializeAuthenticator ... Initialize an authenticator.
+// InitializeAuthenticator initializes an authenticator.
 func InitializeAuthenticator(config Config) *Authenticator {
 	// If Redis, create a Redis connection.
 	if config.Redis.Enabled {
@@ -36,7 +36,7 @@ func InitializeAuthenticator(config Config) *Authenticator {
 	return connector
 }
 
-// InitializeRedisAuthenticator ... Initialize an authenticator using Redis.
+// InitializeRedisAuthenticator initializes an authenticator using Redis.
 func InitializeRedisAuthenticator(config Config) *Authenticator {
 	pool := &redis.Pool{
 		MaxIdle:   5,
@@ -53,7 +53,7 @@ func InitializeRedisAuthenticator(config Config) *Authenticator {
 	return authenticator
 }
 
-// Validate ... Called on an HTTP API execution and checks whether the user is authenticated or not.
+// Validate is called on an HTTP API request and checks whether or not the user is authenticated.
 // Stores tokens in Redis if required.
 func (a *Authenticator) Validate(w http.ResponseWriter, r *http.Request) bool {
 	token := r.Header.Get("Authorization")
@@ -86,7 +86,7 @@ func (a *Authenticator) Validate(w http.ResponseWriter, r *http.Request) bool {
 	return false
 }
 
-// Login ... Allows logging in a user and returning the token.
+// Login allows logging in a user and returning the token.
 func (a *Authenticator) Login(username string, password string) string {
 	// Hash the password.
 	sha256sum := fmt.Sprintf("%x", sha256.Sum256([]byte(password)))
@@ -119,7 +119,7 @@ func (a *Authenticator) Login(username string, password string) string {
 	return base64.StdEncoding.EncodeToString(token)
 }
 
-// Logout ... Allows logging out of a user and deleting the token from the server.
+// Logout allows logging out of a user and deleting the token from the server.
 func (a *Authenticator) Logout(token string) bool {
 	if a.Redis != nil {
 		conn := a.Redis.Get()

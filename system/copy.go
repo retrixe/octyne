@@ -6,7 +6,7 @@ import (
 	"os"
 )
 
-// CopyFile ... Copy a file from one place to another.
+// CopyFile copies a file from one place to another.
 func CopyFile(path string, dest string) error {
 	stat, err := os.Stat(path)
 	if err != nil {

@@ -15,7 +15,7 @@ import (
 
 // Extracted from https://github.com/struCoder/pidusage which is licensed under MIT License.
 
-// ProcessStats ... Statistics of a process.
+// ProcessStats is statistics of a process.
 type ProcessStats struct {
 	CPUUsage  float64
 	RSSMemory float64
@@ -47,7 +47,7 @@ func parseFloat(val string) float64 {
 	return floatVal
 }
 
-// GetProcessStats ... Get the stats of a process.
+// GetProcessStats gets the stats of a process.
 func GetProcessStats(pid int) (ProcessStats, error) {
 	processStats := ProcessStats{}
 	_history := history[pid]

@@ -11,7 +11,7 @@ import (
 	"github.com/gorilla/handlers"
 )
 
-// OctyneVersion ... Last version of Octyne this code is based on.
+// OctyneVersion is the last version of Octyne this code is based on.
 const OctyneVersion = "1.0.0"
 
 func getPort(config Config) string {
@@ -55,7 +55,7 @@ func main() {
 
 	// Run processes, passing the daemon connector.
 	for _, name := range servers {
-		go RunProcess(name, config.Servers[name], connector)
+		go CreateProcess(name, config.Servers[name], connector)
 	}
 
 	// Listen.

@@ -9,7 +9,7 @@ import (
 	"unsafe"
 )
 
-// ProcessStats ... Statistics of a process.
+// ProcessStats is statistics of a process.
 type ProcessStats struct {
 	CPUUsage  float64
 	RSSMemory float64
@@ -30,7 +30,7 @@ type processMemoryCounters struct {
 	PeakPagefileUsage          uint64
 }
 
-// GetProcessStats ... Get the stats of a process.
+// GetProcessStats gets the stats of a process.
 func GetProcessStats(pid int) (ProcessStats, error) {
 	// Open the process.
 	process, err := syscall.OpenProcess(processQueryLimitedInformation, false, uint32(pid))

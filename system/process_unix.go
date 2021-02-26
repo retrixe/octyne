@@ -10,13 +10,13 @@ import (
 	"strings"
 )
 
-// ProcessStats ... Statistics of a process.
+// ProcessStats is statistics of a process.
 type ProcessStats struct {
 	CPUUsage  float64
 	RSSMemory float64
 }
 
-// GetProcessStats ... Get the stats of a process.
+// GetProcessStats gets the stats of a process.
 func GetProcessStats(pid int) (ProcessStats, error) {
 	cmd := "pcpu,rss,cmd"
 	if runtime.GOOS == "aix" {

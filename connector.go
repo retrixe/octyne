@@ -23,15 +23,14 @@ type server struct {
 	Console string
 }
 
-// Ticket ... A one-time ticket usable by browsers to quickly authenticate with the WebSocket API.
+// Ticket is a one-time ticket usable by browsers to quickly authenticate with the WebSocket API.
 type Ticket struct {
 	Time   int64
 	Token  string
 	IPAddr string
 }
 
-// Connector ...
-// A connector used by octyne to create an HTTP API to interact with integrations.
+// Connector is used to create an HTTP API for external apps to talk with octyne.
 type Connector struct {
 	Config
 	*Authenticator
@@ -41,7 +40,7 @@ type Connector struct {
 	Tickets   map[string]Ticket
 }
 
-// GetIP ... Gets an IP address from http.Request.RemoteAddr.
+// GetIP gets an IP address from http.Request.RemoteAddr.
 func GetIP(r *http.Request) string {
 	if r.Header.Get("x-forwarded-for") != "" {
 		return strings.Split(r.Header.Get("x-forwarded-for"), ", ")[0]
@@ -53,7 +52,7 @@ func GetIP(r *http.Request) string {
 	return r.RemoteAddr[:index]
 }
 
-// InitializeConnector ... Initialize a connector to create an HTTP API for interaction.
+// InitializeConnector initializes a connector to create an HTTP API for interaction.
 func InitializeConnector(config Config) *Connector {
 	// Create the connector.
 	connector := &Connector{
@@ -97,7 +96,7 @@ func InitializeConnector(config Config) *Connector {
 	return connector
 }
 
-// AddProcess ... Add a process to the connector to be opened up.
+// AddProcess adds a process to the connector to be accessed via the HTTP API.
 func (connector *Connector) AddProcess(process *Process) {
 	server := &server{
 		Process: process,

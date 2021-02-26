@@ -13,7 +13,7 @@ func joinPath(elem ...string) string {
 	return filepath.FromSlash(path.Join(elem...))
 }
 
-// UnzipFile ... Unzips a file to a location.
+// UnzipFile unzips a file to a location.
 func UnzipFile(zipFile string, location string) error {
 	r, err := zip.OpenReader(zipFile)
 	if err != nil {
@@ -58,7 +58,7 @@ func UnzipFile(zipFile string, location string) error {
 	return nil
 }
 
-// AddFileToZip ... Adds a file to a zip.Writer using Deflate.
+// AddFileToZip adds a file to a zip.Writer using Deflate.
 func AddFileToZip(archive *zip.Writer, dir string, file string, compress bool) error {
 	fileToZip, err := os.Open(joinPath(dir, file))
 	if err != nil {
