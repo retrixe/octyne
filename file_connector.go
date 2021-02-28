@@ -102,8 +102,8 @@ func (connector *Connector) registerFileRoutes() {
 	// DELETE /server/{id}/file?path=path
 	// PATCH /server/{id}/file?path=path
 	connector.Router.HandleFunc("/server/{id}/file", func(w http.ResponseWriter, r *http.Request) {
-		if t, e := connector.Tickets[r.URL.Query().Get("ticket")]; e && r.Method == "GET" && t.IPAddr == GetIP(r) {
-			delete(connector.Tickets, r.URL.Query().Get("ticket"))
+		if t, e := connector.GetTicket(r.URL.Query().Get("ticket")); e && r.Method == "GET" && t.IPAddr == GetIP(r) {
+			connector.DeleteTicket(r.URL.Query().Get("ticket"))
 		} else if !connector.Validate(w, r) {
 			return
 		}

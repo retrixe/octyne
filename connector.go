@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -19,8 +20,10 @@ import (
 // An internal representation of Process along with the clients connected to it and its output.
 type server struct {
 	*Process
-	Clients map[string]*websocket.Conn
-	Console string
+	Clients     map[string]*websocket.Conn
+	Console     string
+	ClientsLock sync.RWMutex
+	ConsoleLock sync.RWMutex
 }
 
 // Ticket is a one-time ticket usable by browsers to quickly authenticate with the WebSocket API.
@@ -36,8 +39,24 @@ type Connector struct {
 	*Authenticator
 	*mux.Router
 	*websocket.Upgrader
-	Processes map[string]*server
-	Tickets   map[string]Ticket
+	Processes   map[string]*server
+	Tickets     map[string]Ticket
+	TicketsLock sync.RWMutex
+}
+
+// DeleteTicket deletes a ticket from the Connector and handles the TicketsLock.
+func (connector *Connector) DeleteTicket(id string) {
+	connector.TicketsLock.Lock()
+	defer connector.TicketsLock.Unlock()
+	delete(connector.Tickets, id)
+}
+
+// GetTicket gets a ticket from the Connector and handles the TicketsLock.
+func (connector *Connector) GetTicket(id string) (Ticket, bool) {
+	connector.TicketsLock.RLock()
+	defer connector.TicketsLock.RUnlock()
+	a, b := connector.Tickets[id]
+	return a, b
 }
 
 // GetIP gets an IP address from http.Request.RemoteAddr.
@@ -111,14 +130,18 @@ func (connector *Connector) AddProcess(process *Process) {
 		for scanner.Scan() {
 			m := scanner.Text()
 			// Truncate the console scrollback to 2500 to prevent excess memory usage and download cost.
+			server.ConsoleLock.Lock()
 			truncate := strings.Split(server.Console, "\n")
 			if len(truncate) >= 2500 {
 				server.Console = strings.Join(truncate[len(truncate)-2500:], "\n")
 			}
 			server.Console = server.Console + "\n" + m
+			server.ConsoleLock.Unlock()
+			server.ClientsLock.RLock()
 			for _, connection := range server.Clients {
 				connection.WriteMessage(websocket.TextMessage, []byte(m)) // skipcq GSC-G104
 			}
+			server.ClientsLock.RUnlock()
 		}
 	})()
 }
@@ -196,15 +219,17 @@ func (connector *Connector) registerRoutes() {
 		ticket := make([]byte, 4)
 		rand.Read(ticket)
 		ticketString := base64.StdEncoding.EncodeToString(ticket)
+		connector.TicketsLock.Lock()
 		connector.Tickets[ticketString] = Ticket{
 			Time:   time.Now().Unix(),
 			Token:  r.Header.Get("Authorization"),
 			IPAddr: GetIP(r),
 		}
+		connector.TicketsLock.Unlock()
 		// Schedule deletion (cancellable).
 		go (func() {
 			<-time.After(2 * time.Minute)
-			delete(connector.Tickets, ticketString)
+			connector.DeleteTicket(ticketString)
 		})()
 		// Send the response.
 		fmt.Fprint(w, "{\"ticket\": \""+ticketString+"\"}")
@@ -304,9 +329,9 @@ func (connector *Connector) registerRoutes() {
 	connector.Upgrader.CheckOrigin = func(r *http.Request) bool { return true }
 	connector.Router.HandleFunc("/server/{id}/console", func(w http.ResponseWriter, r *http.Request) {
 		// Check with authenticator.
-		t, e := connector.Tickets[r.URL.Query().Get("ticket")]
+		t, e := connector.GetTicket(r.URL.Query().Get("ticket"))
 		if e && t.IPAddr == GetIP(r) {
-			delete(connector.Tickets, r.URL.Query().Get("ticket"))
+			connector.DeleteTicket(r.URL.Query().Get("ticket"))
 		} else if !connector.Validate(w, r) {
 			return
 		}
@@ -334,17 +359,25 @@ func (connector *Connector) registerRoutes() {
 			defer c.Close()
 			// Add connection to the process after sending current console output.
 			// Tell Deepsource it's okay to error here: skipcq GSC-G104
+			process.ConsoleLock.RLock()
 			c.WriteMessage(websocket.TextMessage, []byte(process.Console)) // TODO: Consider Mutexes.
+			process.ConsoleLock.RUnlock()
+			process.ClientsLock.Lock()
 			process.Clients[token] = c
+			process.ClientsLock.Unlock()
 			// Read messages from the user and execute them.
 			for {
 				// Another client has connected with the same token. Terminate existing connection.
+				process.ClientsLock.RLock()
 				if process.Clients[token] != c {
 					break
 				}
+				process.ClientsLock.RUnlock()
 				// Read messages from the user.
 				_, message, err := c.ReadMessage()
 				if err != nil {
+					process.ClientsLock.Lock()
+					defer process.ClientsLock.Unlock()
 					delete(process.Clients, token)
 					break // The WebSocket connection has terminated.
 				} else {

@@ -91,7 +91,7 @@ func (process *Process) StopProcess() {
 	// Stop the command.
 	command.Process.Kill()
 	process.Online = 0
-	process.SendConsoleOutput("[Octyne] Stopped server " + process.Name)
+	// process.SendConsoleOutput("[Octyne] Stopped server " + process.Name)
 }
 
 // SendCommand sends an input to stdin of the process.
