@@ -15,8 +15,10 @@ import (
 	"github.com/gomodule/redigo/redis"
 )
 
+// TODO: An interface would be better, implemented by two authenticators.
+
 // Authenticator is used by Octyne's Connector to provide HTTP API authentication.
-type Authenticator struct { // An interface would be better, implemented by two authenticators.
+type Authenticator struct {
 	Config
 	Redis  *redis.Pool
 	Tokens []string

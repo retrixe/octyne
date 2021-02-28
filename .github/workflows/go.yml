@@ -39,7 +39,7 @@ jobs:
     
     - name: Upload a Build Artifact (Linux)
       uses: actions/upload-artifact@v2.1.4
-      if: ${{ success() && matrix.os == 'ubuntu-latest' }}
+      if: ${{ success() && matrix.os == 'ubuntu-16.04' }}
       with:
         # Artifact name
         name: octyne-linux # optional, default is artifact
