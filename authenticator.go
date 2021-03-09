@@ -9,37 +9,51 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"os"
+	"sync"
 	"time"
 
 	"github.com/gomodule/redigo/redis"
 )
 
-// TODO: An interface would be better, implemented by two authenticators.
-
 // Authenticator is used by Octyne's Connector to provide HTTP API authentication.
-type Authenticator struct {
+type Authenticator interface {
+	// Validate is called on an HTTP API request and checks whether or not the user is authenticated.
+	Validate(w http.ResponseWriter, r *http.Request) bool
+	// Login allows logging in a user and returning the token.
+	Login(username string, password string) string
+	// Logout allows logging out of a user and deleting the token from the server.
+	Logout(token string) bool
+}
+
+// RedisAuthenticator is an Authenticator implementation using Redis to store tokens.
+type RedisAuthenticator struct {
 	Config
-	Redis  *redis.Pool
-	Tokens []string
+	Redis *redis.Pool
+}
+
+// MemoryAuthenticator is an Authenticator implementation using an array to store tokens.
+type MemoryAuthenticator struct {
+	Config
+	TokenMutex sync.RWMutex
+	Tokens     []string
 }
 
 // InitializeAuthenticator initializes an authenticator.
-func InitializeAuthenticator(config Config) *Authenticator {
+func InitializeAuthenticator(config Config) Authenticator {
 	// If Redis, create a Redis connection.
 	if config.Redis.Enabled {
 		return InitializeRedisAuthenticator(config)
 	}
-	// Create the connector.
-	connector := &Authenticator{
+	// Create the authenticator.
+	authenticator := &MemoryAuthenticator{
 		Config: config,
 		Tokens: make([]string, 0),
 	}
-	return connector
+	return authenticator
 }
 
 // InitializeRedisAuthenticator initializes an authenticator using Redis.
-func InitializeRedisAuthenticator(config Config) *Authenticator {
+func InitializeRedisAuthenticator(config Config) Authenticator {
 	pool := &redis.Pool{
 		MaxIdle:   5,
 		MaxActive: 5,
@@ -51,13 +65,11 @@ func InitializeRedisAuthenticator(config Config) *Authenticator {
 			return conn, err
 		},
 	}
-	authenticator := &Authenticator{Config: config, Redis: pool}
+	authenticator := &RedisAuthenticator{Config: config, Redis: pool}
 	return authenticator
 }
 
-// Validate is called on an HTTP API request and checks whether or not the user is authenticated.
-// Stores tokens in Redis if required.
-func (a *Authenticator) Validate(w http.ResponseWriter, r *http.Request) bool {
+func getTokenFromRequest(r *http.Request) string {
 	token := r.Header.Get("Authorization")
 	// For WebSockets, special case.
 	if r.Header.Get("Cookie") != "" && token == "" {
@@ -66,18 +78,15 @@ func (a *Authenticator) Validate(w http.ResponseWriter, r *http.Request) bool {
 			token = cookie.Value
 		}
 	}
-	// If Redis, make request to Redis database.
-	if a.Redis != nil {
-		conn := a.Redis.Get()
-		defer conn.Close()
-		res, err := redis.Int(conn.Do("EXISTS", token))
-		if err != nil {
-			log.Println("An error occurred while making a request to Redis!", err)
-			return false
-		}
-		return res == 1
-	}
+	return token
+}
+
+// Validate is called on an HTTP API request and checks whether or not the user is authenticated.
+func (a *MemoryAuthenticator) Validate(w http.ResponseWriter, r *http.Request) bool {
+	token := getTokenFromRequest(r)
 	// If valid, return true.
+	a.TokenMutex.RLock()
+	defer a.TokenMutex.RUnlock()
 	for _, value := range a.Tokens {
 		if value == token && value != "" {
 			return true
@@ -88,18 +97,40 @@ func (a *Authenticator) Validate(w http.ResponseWriter, r *http.Request) bool {
 	return false
 }
 
-// Login allows logging in a user and returning the token.
-func (a *Authenticator) Login(username string, password string) string {
+// Validate is called on an HTTP API request and checks whether or not the user is authenticated.
+func (a *RedisAuthenticator) Validate(w http.ResponseWriter, r *http.Request) bool {
+	token := getTokenFromRequest(r)
+	// Make request to Redis database.
+	conn := a.Redis.Get()
+	defer conn.Close()
+	res, err := redis.Int(conn.Do("EXISTS", token))
+	if err != nil {
+		log.Println("An error occurred while making a request to Redis!", err)
+		http.Error(w, "{\"error\": \"Internal Server Error!\"}", http.StatusInternalServerError)
+		return false
+	}
+	if res != 1 {
+		http.Error(w, "{\"error\": \"You are not authenticated to access this resource!\"}",
+			http.StatusUnauthorized)
+	}
+	return res == 1
+}
+
+func checkValidLoginAndGenerateToken(username string, password string) string {
 	// Hash the password.
 	sha256sum := fmt.Sprintf("%x", sha256.Sum256([]byte(password)))
 	// Read users.json and check whether a user with such a username and password exists.
 	var users map[string]string
-	file, err := os.Open("users.json")
+	contents, err := ioutil.ReadFile("users.json")
 	if err != nil {
 		log.Println("An error occurred while attempting to read users.json!\n" + err.Error())
+		return ""
 	}
-	contents, _ := ioutil.ReadAll(file)
-	json.Unmarshal(contents, &users) // Tolerate errors here: skipcq GSC-G104
+	err = json.Unmarshal(contents, &users)
+	if err != nil {
+		log.Println("An error occurred while attempting to read users.json!\n" + err.Error())
+		return ""
+	}
 	// Check whether this user exists.
 	hashedPassword, exists := users[username]
 	if !exists || hashedPassword != sha256sum {
@@ -108,36 +139,59 @@ func (a *Authenticator) Login(username string, password string) string {
 	// Generate a token and return it.
 	token := make([]byte, 96)
 	rand.Read(token) // Tolerate errors here, an error here is incredibly unlikely: skipcq GSC-G104
-	if a.Redis != nil {
-		conn := a.Redis.Get()
-		defer conn.Close()
-		_, err := conn.Do("SET", base64.StdEncoding.EncodeToString(token), username)
-		if err != nil {
-			log.Println("An error occurred while making a request to Redis for login!", err)
-		}
-	} else {
-		a.Tokens = append(a.Tokens, base64.StdEncoding.EncodeToString(token))
-	}
 	return base64.StdEncoding.EncodeToString(token)
 }
 
-// Logout allows logging out of a user and deleting the token from the server.
-func (a *Authenticator) Logout(token string) bool {
-	if a.Redis != nil {
-		conn := a.Redis.Get()
-		defer conn.Close()
-		res, err := redis.Int(conn.Do("DEL", token))
-		if err != nil {
-			log.Println("An error occurred while making a request to Redis for logout!", err)
-			return false
-		}
-		return res == 1
+// Login allows logging in a user and returning the token.
+func (a *MemoryAuthenticator) Login(username string, password string) string {
+	token := checkValidLoginAndGenerateToken(username, password)
+	if token == "" {
+		return ""
 	}
+	a.TokenMutex.Lock()
+	defer a.TokenMutex.Unlock()
+	a.Tokens = append(a.Tokens, token)
+	return token
+}
+
+// Login allows logging in a user and returning the token.
+func (a *RedisAuthenticator) Login(username string, password string) string {
+	token := checkValidLoginAndGenerateToken(username, password)
+	if token == "" {
+		return ""
+	}
+	conn := a.Redis.Get()
+	defer conn.Close()
+	_, err := conn.Do("SET", token, username)
+	if err != nil {
+		log.Println("An error occurred while making a request to Redis for login!", err)
+	}
+	return token
+}
+
+// Logout allows logging out of a user and deleting the token from the server.
+func (a *MemoryAuthenticator) Logout(token string) bool {
+	a.TokenMutex.RLock()
+	defer a.TokenMutex.RUnlock()
 	for i, t := range a.Tokens {
 		if t == token {
+			a.TokenMutex.Lock()
+			defer a.TokenMutex.Unlock()
 			a.Tokens = append(a.Tokens[:i], a.Tokens[i+1:]...)
 			return true
 		}
 	}
 	return false
+}
+
+// Logout allows logging out of a user and deleting the token from the server.
+func (a *RedisAuthenticator) Logout(token string) bool {
+	conn := a.Redis.Get()
+	defer conn.Close()
+	res, err := redis.Int(conn.Do("DEL", token))
+	if err != nil {
+		log.Println("An error occurred while making a request to Redis for logout!", err)
+		return false
+	}
+	return res == 1
 }

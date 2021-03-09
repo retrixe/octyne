@@ -72,8 +72,9 @@ func main() {
 	} else {
 		err = http.ListenAndServeTLS(port, config.HTTPS.Cert, config.HTTPS.Key, handler)
 	}
-	if connector.Authenticator.Redis != nil { // Close Redis if needed.
-		if redisErr := connector.Authenticator.Redis.Close(); redisErr != nil {
+	redisAuthenticator, isRedisAuthenticator := connector.Authenticator.(*RedisAuthenticator)
+	if isRedisAuthenticator && redisAuthenticator.Redis != nil { // Close Redis if needed.
+		if redisErr := redisAuthenticator.Redis.Close(); redisErr != nil {
 			println(redisErr)
 		}
 	}

@@ -36,7 +36,7 @@ type Ticket struct {
 // Connector is used to create an HTTP API for external apps to talk with octyne.
 type Connector struct {
 	Config
-	*Authenticator
+	Authenticator
 	*mux.Router
 	*websocket.Upgrader
 	Processes   map[string]*server
