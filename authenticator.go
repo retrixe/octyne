@@ -96,7 +96,7 @@ func (a *Authenticator) Login(username string, password string) string {
 	var users map[string]string
 	file, err := os.Open("users.json")
 	if err != nil {
-		panic("An error occurred while attempting to read users.json!\n" + err.Error())
+		log.Println("An error occurred while attempting to read users.json!\n" + err.Error())
 	}
 	contents, _ := ioutil.ReadAll(file)
 	json.Unmarshal(contents, &users) // Tolerate errors here: skipcq GSC-G104

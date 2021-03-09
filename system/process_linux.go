@@ -32,12 +32,11 @@ type Stat struct {
 	uptime float64
 }
 
-var history map[int]Stat
+var history map[int]Stat = make(map[int]Stat)
 var historyLock sync.Mutex
-var eol string
 
 func formatStdOut(stdout []byte, userfulIndex int) []string {
-	infoArr := strings.Split(string(stdout), eol)[userfulIndex]
+	infoArr := strings.Split(string(stdout), "\n")[userfulIndex]
 	ret := strings.Fields(infoArr)
 	return ret
 }
