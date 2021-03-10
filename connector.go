@@ -33,13 +33,25 @@ type Ticket struct {
 	IPAddr string
 }
 
+type processMap struct{ sync.Map }
+
+// Get gets a *server from a processMap by using sync.Map Load function and type-casting.
+func (p *processMap) Get(name string) (*server, bool) {
+	item, err := p.Load(name)
+	if !err {
+		return nil, err
+	}
+	process, err := item.(*server)
+	return process, err
+}
+
 // Connector is used to create an HTTP API for external apps to talk with octyne.
 type Connector struct {
 	Config
 	Authenticator
 	*mux.Router
 	*websocket.Upgrader
-	Processes   map[string]*server
+	Processes   processMap
 	Tickets     map[string]Ticket
 	TicketsLock sync.RWMutex
 }
@@ -77,7 +89,7 @@ func InitializeConnector(config Config) *Connector {
 	connector := &Connector{
 		Config:        config,
 		Router:        mux.NewRouter().StrictSlash(true),
-		Processes:     make(map[string]*server),
+		Processes:     processMap{},
 		Tickets:       make(map[string]Ticket),
 		Authenticator: InitializeAuthenticator(config),
 		Upgrader:      &websocket.Upgrader{},
@@ -122,7 +134,7 @@ func (connector *Connector) AddProcess(process *Process) {
 		Clients: make(map[string]*websocket.Conn),
 		Console: "",
 	}
-	connector.Processes[server.Name] = server
+	connector.Processes.Store(server.Name, server)
 	// Run a function which will monitor the console output of this process.
 	go (func() {
 		scanner := bufio.NewScanner(server.Output)
@@ -202,9 +214,10 @@ func (connector *Connector) registerRoutes() {
 		}
 		// Get a map of servers and their online status.
 		servers := make(map[string]int)
-		for _, v := range connector.Processes {
-			servers[v.Name] = v.Online
-		}
+		connector.Processes.Range(func(k, v interface{}) bool {
+			servers[v.(*server).Name] = v.(*server).Online
+			return true
+		})
 		// Send the list.
 		json.NewEncoder(w).Encode(serversResponse{Servers: servers}) // skipcq GSC-G104
 	})
@@ -217,7 +230,7 @@ func (connector *Connector) registerRoutes() {
 		}
 		// Add a ticket.
 		ticket := make([]byte, 4)
-		rand.Read(ticket)
+		rand.Read(ticket) // Tolerate errors here, an error here is incredibly unlikely: skipcq GSC-G104
 		ticketString := base64.StdEncoding.EncodeToString(ticket)
 		connector.TicketsLock.Lock()
 		connector.Tickets[ticketString] = Ticket{
@@ -253,7 +266,7 @@ func (connector *Connector) registerRoutes() {
 		}
 		// Get the server being accessed.
 		id := mux.Vars(r)["id"]
-		process, err := connector.Processes[id]
+		process, err := connector.Processes.Get(id)
 		// In case the server doesn't exist.
 		if !err {
 			http.Error(w, "{\"error\":\"This server does not exist!\"}", http.StatusNotFound)
@@ -272,8 +285,8 @@ func (connector *Connector) registerRoutes() {
 			// Check whether the operation is correct or not.
 			if operation == "START" {
 				// Start process if required.
-				if connector.Processes[id].Online != 1 {
-					err = connector.Processes[id].StartProcess()
+				if process.Online != 1 {
+					err = process.StartProcess()
 				}
 				// Send a response.
 				res := make(map[string]bool)
@@ -281,8 +294,8 @@ func (connector *Connector) registerRoutes() {
 				json.NewEncoder(w).Encode(res) // skipcq GSC-G104
 			} else if operation == "STOP" {
 				// Stop process if required.
-				if connector.Processes[id].Online == 1 {
-					connector.Processes[id].StopProcess()
+				if process.Online == 1 {
+					process.StopProcess()
 				}
 				// Send a response.
 				res := make(map[string]bool)
@@ -347,7 +360,7 @@ func (connector *Connector) registerRoutes() {
 		}
 		// Get the server being accessed.
 		id := mux.Vars(r)["id"]
-		process, exists := connector.Processes[id]
+		process, exists := connector.Processes.Get(id)
 		// In case the server doesn't exist.
 		if !exists {
 			http.Error(w, "{\"error\":\"This server does not exist!\"", http.StatusNotFound)
@@ -358,12 +371,12 @@ func (connector *Connector) registerRoutes() {
 		if err == nil {
 			defer c.Close()
 			// Add connection to the process after sending current console output.
-			// Tell Deepsource it's okay to error here: skipcq GSC-G104
 			process.ConsoleLock.RLock()
-			c.WriteMessage(websocket.TextMessage, []byte(process.Console)) // TODO: Consider Mutexes.
-			process.ConsoleLock.RUnlock()
+			c.WriteMessage(websocket.TextMessage, []byte(process.Console)) // skipcq GSC-G104
+			// This should be able to make sure the client is synced with output, no matter what.
 			process.ClientsLock.Lock()
 			process.Clients[token] = c
+			process.ConsoleLock.RUnlock()
 			process.ClientsLock.Unlock()
 			// Read messages from the user and execute them.
 			for {

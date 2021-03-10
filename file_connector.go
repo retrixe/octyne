@@ -39,7 +39,7 @@ func (connector *Connector) registerFileRoutes() {
 		}
 		// Get the server being accessed.
 		id := mux.Vars(r)["id"]
-		server, err := connector.Processes[id]
+		server, err := connector.Processes.Get(id)
 		// In case the server doesn't exist.
 		if !err {
 			http.Error(w, "{\"error\":\"This server does not exist!\"}", http.StatusNotFound)
@@ -109,7 +109,7 @@ func (connector *Connector) registerFileRoutes() {
 		}
 		// Get the server being accessed.
 		id := mux.Vars(r)["id"]
-		server, err := connector.Processes[id]
+		server, err := connector.Processes.Get(id)
 		// In case the server doesn't exist.
 		if !err {
 			http.Error(w, "{\"error\":\"This server does not exist!\"}", http.StatusNotFound)
@@ -279,7 +279,7 @@ func (connector *Connector) registerFileRoutes() {
 		}
 		// Get the server being accessed.
 		id := mux.Vars(r)["id"]
-		server, err := connector.Processes[id]
+		server, err := connector.Processes.Get(id)
 		// In case the server doesn't exist.
 		if !err {
 			http.Error(w, "{\"error\":\"This server does not exist!\"}", http.StatusNotFound)
@@ -318,7 +318,7 @@ func (connector *Connector) registerFileRoutes() {
 		}
 		// Get the server being accessed.
 		id := mux.Vars(r)["id"]
-		server, err := connector.Processes[id]
+		server, err := connector.Processes.Get(id)
 		// In case the server doesn't exist.
 		if !err {
 			http.Error(w, "{\"error\":\"This server does not exist!\"}", http.StatusNotFound)
@@ -392,7 +392,7 @@ func (connector *Connector) registerFileRoutes() {
 		}
 		// Get the server being accessed.
 		id := mux.Vars(r)["id"]
-		server, err := connector.Processes[id]
+		server, err := connector.Processes.Get(id)
 		// In case the server doesn't exist.
 		if !err {
 			http.Error(w, "{\"error\":\"This server does not exist!\"}", http.StatusNotFound)
