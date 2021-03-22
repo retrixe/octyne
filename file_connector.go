@@ -327,10 +327,18 @@ func (connector *Connector) registerFileRoutes() {
 		if r.Method == "POST" {
 			// Get the body.
 			var buffer bytes.Buffer
-			buffer.ReadFrom(r.Body)
+			_, err := buffer.ReadFrom(r.Body)
+			if err != nil {
+				http.Error(w, "{\"error\":\"Failed to read body!\"}", http.StatusBadRequest)
+				return
+			}
 			// Decode the array body and send it to files.
 			var files []string
-			json.Unmarshal(buffer.Bytes(), &files)
+			err = json.Unmarshal(buffer.Bytes(), &files)
+			if err != nil {
+				http.Error(w, "{\"error\":\"Invalid JSON body!\"}", http.StatusBadRequest)
+				return
+			}
 			// Validate every path.
 			for _, file := range files {
 				filepath := joinPath(server.Directory, file)

@@ -55,6 +55,7 @@ func InitializeAuthenticator(config Config) Authenticator {
 // InitializeRedisAuthenticator initializes an authenticator using Redis.
 func InitializeRedisAuthenticator(config Config) Authenticator {
 	pool := &redis.Pool{
+		Wait:      true,
 		MaxIdle:   5,
 		MaxActive: 5,
 		Dial: func() (redis.Conn, error) {
