@@ -20,7 +20,7 @@ import (
 // An internal representation of Process along with the clients connected to it and its output.
 type server struct {
 	*Process
-	Clients     map[string]*websocket.Conn
+	Clients     map[string]chan []byte
 	Console     string
 	ClientsLock sync.RWMutex
 	ConsoleLock sync.RWMutex
@@ -131,7 +131,7 @@ func InitializeConnector(config Config) *Connector {
 func (connector *Connector) AddProcess(process *Process) {
 	server := &server{
 		Process: process,
-		Clients: make(map[string]*websocket.Conn),
+		Clients: make(map[string]chan []byte),
 		Console: "",
 	}
 	connector.Processes.Store(server.Name, server)
@@ -142,18 +142,20 @@ func (connector *Connector) AddProcess(process *Process) {
 		for scanner.Scan() {
 			m := scanner.Text()
 			// Truncate the console scrollback to 2500 to prevent excess memory usage and download cost.
-			server.ConsoleLock.Lock()
-			truncate := strings.Split(server.Console, "\n")
-			if len(truncate) >= 2500 {
-				server.Console = strings.Join(truncate[len(truncate)-2500:], "\n")
-			}
-			server.Console = server.Console + "\n" + m
-			server.ConsoleLock.Unlock()
-			server.ClientsLock.RLock()
-			for _, connection := range server.Clients {
-				connection.WriteMessage(websocket.TextMessage, []byte(m)) // skipcq GSC-G104
-			}
-			server.ClientsLock.RUnlock()
+			(func() {
+				server.ConsoleLock.Lock()
+				defer server.ConsoleLock.Unlock()
+				truncate := strings.Split(server.Console, "\n")
+				if len(truncate) >= 2500 {
+					server.Console = strings.Join(truncate[len(truncate)-2500:], "\n")
+				}
+				server.Console = server.Console + "\n" + m
+				server.ClientsLock.RLock()
+				defer server.ClientsLock.RUnlock()
+				for _, connection := range server.Clients {
+					connection <- []byte(m)
+				}
+			})()
 		}
 	})()
 }
@@ -232,13 +234,15 @@ func (connector *Connector) registerRoutes() {
 		ticket := make([]byte, 4)
 		rand.Read(ticket) // Tolerate errors here, an error here is incredibly unlikely: skipcq GSC-G104
 		ticketString := base64.StdEncoding.EncodeToString(ticket)
-		connector.TicketsLock.Lock()
-		connector.Tickets[ticketString] = Ticket{
-			Time:   time.Now().Unix(),
-			Token:  r.Header.Get("Authorization"),
-			IPAddr: GetIP(r),
-		}
-		connector.TicketsLock.Unlock()
+		(func() {
+			connector.TicketsLock.Lock()
+			defer connector.TicketsLock.Unlock()
+			connector.Tickets[ticketString] = Ticket{
+				Time:   time.Now().Unix(),
+				Token:  r.Header.Get("Authorization"),
+				IPAddr: GetIP(r),
+			}
+		})()
 		// Schedule deletion (cancellable).
 		go (func() {
 			<-time.After(2 * time.Minute)
@@ -370,22 +374,40 @@ func (connector *Connector) registerRoutes() {
 		c, err := connector.Upgrade(w, r, nil)
 		if err == nil {
 			defer c.Close()
+			// Use a channel to synchronise all writes to the WebSocket.
+			writeToWs := make(chan []byte, 8)
+			defer close(writeToWs)
+			go (func() {
+				for {
+					if data, ok := <-writeToWs; !ok {
+						break
+					} else {
+						c.WriteMessage(websocket.TextMessage, data) // skipcq GSC-G104
+					}
+				}
+			})()
 			// Add connection to the process after sending current console output.
-			process.ConsoleLock.RLock()
-			c.WriteMessage(websocket.TextMessage, []byte(process.Console)) // skipcq GSC-G104
-			// This should be able to make sure the client is synced with output, no matter what.
-			process.ClientsLock.Lock()
-			process.Clients[token] = c
-			process.ConsoleLock.RUnlock()
-			process.ClientsLock.Unlock()
+			(func() {
+				process.ConsoleLock.RLock()
+				defer process.ConsoleLock.RUnlock()
+				writeToWs <- []byte(process.Console)
+
+				process.ClientsLock.Lock()
+				defer process.ClientsLock.Unlock()
+				process.Clients[token] = writeToWs
+			})()
 			// Read messages from the user and execute them.
 			for {
+				var client chan []byte
+				(func() { // Use inline function to be able to defer.
+					process.ClientsLock.RLock()
+					defer process.ClientsLock.RUnlock()
+					client = process.Clients[token]
+				})()
 				// Another client has connected with the same token. Terminate existing connection.
-				process.ClientsLock.RLock()
-				if process.Clients[token] != c {
+				if client != writeToWs {
 					break
 				}
-				process.ClientsLock.RUnlock()
 				// Read messages from the user.
 				_, message, err := c.ReadMessage()
 				if err != nil {

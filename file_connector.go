@@ -364,9 +364,6 @@ func (connector *Connector) registerFileRoutes() {
 			if !os.IsNotExist(exists) {
 				http.Error(w, "{\"error\":\"A file already exists at the path of requested ZIP!\"}", http.StatusBadRequest)
 				return
-			} else if exists != nil {
-				http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
-				return
 			}
 
 			// Begin compressing a ZIP.
