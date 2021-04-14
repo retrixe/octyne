@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -137,25 +138,31 @@ func (connector *Connector) AddProcess(process *Process) {
 	connector.Processes.Store(server.Name, server)
 	// Run a function which will monitor the console output of this process.
 	go (func() {
-		scanner := bufio.NewScanner(server.Output)
-		scanner.Split(bufio.ScanLines)
-		for scanner.Scan() {
-			m := scanner.Text()
-			// Truncate the console scrollback to 2500 to prevent excess memory usage and download cost.
-			(func() {
-				server.ConsoleLock.Lock()
-				defer server.ConsoleLock.Unlock()
-				truncate := strings.Split(server.Console, "\n")
-				if len(truncate) >= 2500 {
-					server.Console = strings.Join(truncate[len(truncate)-2500:], "\n")
-				}
-				server.Console = server.Console + "\n" + m
-				server.ClientsLock.RLock()
-				defer server.ClientsLock.RUnlock()
-				for _, connection := range server.Clients {
-					connection <- []byte(m)
-				}
-			})()
+		for {
+			scanner := bufio.NewScanner(server.Output)
+			scanner.Split(bufio.ScanLines)
+			buf := make([]byte, 0, 64*1024) // Support up to 1 MB lines.
+			scanner.Buffer(buf, 1024*1024)
+			for scanner.Scan() {
+				m := scanner.Text()
+				// Truncate the console scrollback to 2500 to prevent excess memory usage and download cost.
+				// TODO: These limits aren't exactly the best, it maxes up to 2.5 GB.
+				(func() {
+					server.ConsoleLock.Lock()
+					defer server.ConsoleLock.Unlock()
+					truncate := strings.Split(server.Console, "\n")
+					if len(truncate) >= 2500 {
+						server.Console = strings.Join(truncate[len(truncate)-2500:], "\n")
+					}
+					server.Console = server.Console + "\n" + m
+					server.ClientsLock.RLock()
+					defer server.ClientsLock.RUnlock()
+					for _, connection := range server.Clients {
+						connection <- []byte(m)
+					}
+				})()
+			}
+			log.Println("Error in " + server.Name + " console: " + scanner.Err().Error())
 		}
 	})()
 }
@@ -255,12 +262,11 @@ func (connector *Connector) registerRoutes() {
 	// GET /server/{id}
 	// POST /server/{id}
 	type serverResponse struct {
-		Status        int     `json:"status"`
-		CPUUsage      float64 `json:"cpuUsage"`
-		MemoryUsage   float64 `json:"memoryUsage"`
-		TotalMemory   int64   `json:"totalMemory"`
-		Uptime        int64   `json:"uptime"`
-		ServerVersion string  `json:"serverVersion"`
+		Status      int     `json:"status"`
+		CPUUsage    float64 `json:"cpuUsage"`
+		MemoryUsage float64 `json:"memoryUsage"`
+		TotalMemory int64   `json:"totalMemory"`
+		Uptime      int64   `json:"uptime"`
 	}
 	totalMemory := int64(system.GetTotalSystemMemory())
 	connector.Router.HandleFunc("/server/{id}", func(w http.ResponseWriter, r *http.Request) {
@@ -329,7 +335,7 @@ func (connector *Connector) registerRoutes() {
 			if uptime > 0 {
 				uptime = time.Now().UnixNano() - process.Uptime
 			}
-			res := serverResponse{ // TODO: Send server version.
+			res := serverResponse{
 				Status:      process.Online,
 				Uptime:      uptime,
 				CPUUsage:    stat.CPUUsage,
