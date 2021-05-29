@@ -61,7 +61,7 @@ func InitializeRedisAuthenticator(config Config) Authenticator {
 		Dial: func() (redis.Conn, error) {
 			conn, err := redis.DialURL(config.Redis.URL, redis.DialConnectTimeout(time.Second*60))
 			if err != nil {
-				log.Println("An error occurred when trying to connect to Redis!", err)
+				log.Println("An error occurred when trying to connect to Redis!", err) // skipcq: GO-S0904
 			}
 			return conn, err
 		},
@@ -82,9 +82,18 @@ func getTokenFromRequest(r *http.Request) string {
 	return token
 }
 
+func isValidToken(token string) bool {
+	_, err := base64.StdEncoding.DecodeString(token)
+	return err == nil && len(token) == 128
+}
+
 // Validate is called on an HTTP API request and checks whether or not the user is authenticated.
 func (a *MemoryAuthenticator) Validate(w http.ResponseWriter, r *http.Request) bool {
 	token := getTokenFromRequest(r)
+	if !isValidToken(token) {
+		http.Error(w, "{\"error\": \"You are not authenticated to access this resource!\"}",
+			http.StatusUnauthorized)
+	}
 	// If valid, return true.
 	a.TokenMutex.RLock()
 	defer a.TokenMutex.RUnlock()
@@ -101,12 +110,16 @@ func (a *MemoryAuthenticator) Validate(w http.ResponseWriter, r *http.Request) b
 // Validate is called on an HTTP API request and checks whether or not the user is authenticated.
 func (a *RedisAuthenticator) Validate(w http.ResponseWriter, r *http.Request) bool {
 	token := getTokenFromRequest(r)
+	if !isValidToken(token) {
+		http.Error(w, "{\"error\": \"You are not authenticated to access this resource!\"}",
+			http.StatusUnauthorized)
+	}
 	// Make request to Redis database.
 	conn := a.Redis.Get()
 	defer conn.Close()
-	res, err := redis.Int(conn.Do("EXISTS", "octyne-token-"+token))
+	res, err := redis.Int(conn.Do("EXISTS", "octyne-token:"+token))
 	if err != nil {
-		log.Println("An error occurred while making a request to Redis!", err)
+		log.Println("An error occurred while making a request to Redis!", err) // skipcq: GO-S0904
 		http.Error(w, "{\"error\": \"Internal Server Error!\"}", http.StatusInternalServerError)
 		return false
 	}
@@ -163,15 +176,18 @@ func (a *RedisAuthenticator) Login(username string, password string) string {
 	}
 	conn := a.Redis.Get()
 	defer conn.Close()
-	_, err := conn.Do("SET", "octyne-token-"+token, username)
+	_, err := conn.Do("SET", "octyne-token:"+token, username)
 	if err != nil {
-		log.Println("An error occurred while making a request to Redis for login!", err)
+		log.Println("An error occurred while making a request to Redis for login!", err) // skipcq: GO-S0904
 	}
 	return token
 }
 
 // Logout allows logging out of a user and deleting the token from the server.
 func (a *MemoryAuthenticator) Logout(token string) bool {
+	if !isValidToken(token) {
+		return false
+	}
 	a.TokenMutex.RLock()
 	defer a.TokenMutex.RUnlock()
 	for i, t := range a.Tokens {
@@ -187,11 +203,14 @@ func (a *MemoryAuthenticator) Logout(token string) bool {
 
 // Logout allows logging out of a user and deleting the token from the server.
 func (a *RedisAuthenticator) Logout(token string) bool {
+	if !isValidToken(token) {
+		return false
+	}
 	conn := a.Redis.Get()
 	defer conn.Close()
-	res, err := redis.Int(conn.Do("DEL", "octyne-token-"+token))
+	res, err := redis.Int(conn.Do("DEL", "octyne-token:"+token))
 	if err != nil {
-		log.Println("An error occurred while making a request to Redis for logout!", err)
+		log.Println("An error occurred while making a request to Redis for logout!", err) // skipcq: GO-S0904
 		return false
 	}
 	return res == 1

@@ -108,7 +108,7 @@ func (process *Process) SendConsoleOutput(command string) {
 func (process *Process) MonitorProcess() error {
 	defer (func() {
 		if e := recover(); e != nil {
-			log.Println(e) // In case of nil pointer exception.
+			log.Println(e) // In case of nil pointer exception. skipcq GO-S0904
 		}
 	})()
 	// Exit immediately if there is no process.

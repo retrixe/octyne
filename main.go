@@ -78,5 +78,5 @@ func main() {
 			println(redisErr)
 		}
 	}
-	log.Fatalln(err)
+	log.Fatalln(err) // skipcq: GO-S0904
 }
