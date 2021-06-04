@@ -12,7 +12,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-16.04, macos-latest, windows-latest]
+        os: [ubuntu-18.04, macos-latest, windows-latest]
     steps:
     - name: Set up Go 1.16
       uses: actions/setup-go@v2
@@ -39,7 +39,7 @@ jobs:
     
     - name: Upload a Build Artifact (Linux)
       uses: actions/upload-artifact@v2.1.4
-      if: ${{ success() && matrix.os == 'ubuntu-16.04' }}
+      if: ${{ success() && matrix.os == 'ubuntu-18.04' }}
       with:
         # Artifact name
         name: octyne-linux # optional, default is artifact

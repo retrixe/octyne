@@ -35,7 +35,7 @@ type RedisAuthenticator struct {
 type MemoryAuthenticator struct {
 	Config
 	TokenMutex sync.RWMutex
-	Tokens     []string
+	Tokens     map[string]string
 }
 
 // InitializeAuthenticator initializes an authenticator.
@@ -47,7 +47,7 @@ func InitializeAuthenticator(config Config) Authenticator {
 	// Create the authenticator.
 	authenticator := &MemoryAuthenticator{
 		Config: config,
-		Tokens: make([]string, 0),
+		Tokens: make(map[string]string),
 	}
 	return authenticator
 }
@@ -97,10 +97,9 @@ func (a *MemoryAuthenticator) Validate(w http.ResponseWriter, r *http.Request) b
 	// If valid, return true.
 	a.TokenMutex.RLock()
 	defer a.TokenMutex.RUnlock()
-	for _, value := range a.Tokens {
-		if value == token && value != "" {
-			return true
-		}
+	_, ok := a.Tokens[token]
+	if ok {
+		return true
 	}
 	http.Error(w, "{\"error\": \"You are not authenticated to access this resource!\"}",
 		http.StatusUnauthorized)
@@ -164,7 +163,7 @@ func (a *MemoryAuthenticator) Login(username string, password string) string {
 	}
 	a.TokenMutex.Lock()
 	defer a.TokenMutex.Unlock()
-	a.Tokens = append(a.Tokens, token)
+	a.Tokens[token] = username
 	return token
 }
 
@@ -188,16 +187,9 @@ func (a *MemoryAuthenticator) Logout(token string) bool {
 	if !isValidToken(token) {
 		return false
 	}
-	a.TokenMutex.RLock()
-	defer a.TokenMutex.RUnlock()
-	for i, t := range a.Tokens {
-		if t == token {
-			a.TokenMutex.Lock()
-			defer a.TokenMutex.Unlock()
-			a.Tokens = append(a.Tokens[:i], a.Tokens[i+1:]...)
-			return true
-		}
-	}
+	a.TokenMutex.Lock()
+	defer a.TokenMutex.Unlock()
+	delete(a.Tokens, token)
 	return false
 }
 
