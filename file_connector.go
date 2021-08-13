@@ -8,10 +8,8 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/gorilla/mux"
@@ -213,22 +211,23 @@ func (connector *Connector) registerFileRoutes() {
 					http.Error(w, "{\"error\":\"The files requested are outside the server!\"}", http.StatusForbidden)
 					return
 				}
-				file, err := os.Open(oldpath)
-				fileStat, err1 := file.Stat()
-				if err != nil || os.IsNotExist(err1) {
+				stat, err := os.Stat(oldpath)
+				if os.IsNotExist(err) {
 					http.Error(w, "{\"error\":\"This file does not exist!\"}", http.StatusNotFound)
 					return
-				}
-				file.Close() // skipcq GSC-G104
-				// Check if destination file exists.
-				file, err = os.Open(newpath)
-				stat, err1 := file.Stat()
-				if (err == nil || os.IsExist(err1)) && stat != nil && !stat.IsDir() {
-					http.Error(w, "{\"error\":\"This file already exists!\"}", http.StatusMethodNotAllowed)
-					defer file.Close()
+				} else if err != nil {
+					http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
 					return
-				} else if stat != nil && stat.IsDir() {
+				}
+				// Check if destination file exists.
+				if stat, err := os.Stat(newpath); err == nil && stat.IsDir() {
 					newpath = joinPath(newpath, path.Base(oldpath))
+				} else if err == nil {
+					http.Error(w, "{\"error\":\"This file already exists!\"}", http.StatusMethodNotAllowed)
+					return
+				} else if err != nil && !os.IsNotExist(err) {
+					http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
+					return
 				}
 				// Move file if operation is mv.
 				if operation[0] == "mv" {
@@ -243,21 +242,8 @@ func (connector *Connector) registerFileRoutes() {
 					}
 					fmt.Fprintf(w, "{\"success\":true}")
 				} else {
-					var failed bool
-					if fileStat.IsDir() { // TODO: Not robust, write a better Copy implementation.
-						var cmd *exec.Cmd
-						if runtime.GOOS == "windows" {
-							cmd = exec.Command("robocopy", oldpath, newpath, "/E")
-						} else {
-							cmd = exec.Command("cp", "-r", oldpath, newpath)
-						}
-						err := cmd.Run()
-						failed = err != nil && (runtime.GOOS != "windows" || cmd.ProcessState.ExitCode() != 1)
-					} else {
-						err := system.CopyFile(oldpath, newpath)
-						failed = err != nil
-					}
-					if failed {
+					err := system.Copy(stat, oldpath, newpath)
+					if err != nil {
 						http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
 						return
 					}
