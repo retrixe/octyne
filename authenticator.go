@@ -93,6 +93,7 @@ func (a *MemoryAuthenticator) Validate(w http.ResponseWriter, r *http.Request) b
 	if !isValidToken(token) {
 		http.Error(w, "{\"error\": \"You are not authenticated to access this resource!\"}",
 			http.StatusUnauthorized)
+		return false
 	}
 	// If valid, return true.
 	a.TokenMutex.RLock()
@@ -112,6 +113,7 @@ func (a *RedisAuthenticator) Validate(w http.ResponseWriter, r *http.Request) bo
 	if !isValidToken(token) {
 		http.Error(w, "{\"error\": \"You are not authenticated to access this resource!\"}",
 			http.StatusUnauthorized)
+		return false
 	}
 	// Make request to Redis database.
 	conn := a.Redis.Get()

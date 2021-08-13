@@ -162,8 +162,8 @@ func (connector *Connector) registerFileRoutes() {
 			}
 			fmt.Fprint(w, "{\"success\":true}")
 		} else if r.Method == "POST" {
-			// Parse our multipart form, 100 << 20 specifies a maximum upload of 100 MB files.
-			err := r.ParseMultipartForm(100 << 20)
+			// Parse our multipart form, 5120 << 20 specifies a maximum upload of a 5 GB file.
+			err := r.ParseMultipartForm(5120 << 20)
 			if err != nil {
 				http.Error(w, "{\"error\":\"Invalid form sent!\"}", http.StatusBadRequest)
 				return
