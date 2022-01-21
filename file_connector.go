@@ -35,17 +35,17 @@ func (connector *Connector) registerFileRoutes() {
 		if !connector.Validate(w, r) {
 			return
 		}
-		// Get the server being accessed.
+		// Get the process being accessed.
 		id := mux.Vars(r)["id"]
-		server, err := connector.Processes.Get(id)
-		// In case the server doesn't exist.
+		process, err := connector.Processes.Get(id)
+		// In case the process doesn't exist.
 		if !err {
 			http.Error(w, "{\"error\":\"This server does not exist!\"}", http.StatusNotFound)
 			return
 		}
-		// Check if folder is in the server directory or not.
-		folderPath := joinPath(server.Directory, r.URL.Query().Get("path"))
-		if !strings.HasPrefix(folderPath, path.Clean(server.Directory)) {
+		// Check if folder is in the process directory or not.
+		folderPath := joinPath(process.Directory, r.URL.Query().Get("path"))
+		if !strings.HasPrefix(folderPath, path.Clean(process.Directory)) {
 			http.Error(w, "{\"error\":\"The folder requested is outside the server!\"}", http.StatusForbidden)
 			return
 		}
@@ -75,7 +75,7 @@ func (connector *Connector) registerFileRoutes() {
 					length = value.Size()
 				}
 				buffer := make([]byte, length)
-				path := joinPath(server.Directory, r.URL.Query().Get("path"), value.Name())
+				path := joinPath(process.Directory, r.URL.Query().Get("path"), value.Name())
 				file, err := os.Open(path)
 				if err == nil {
 					file.Read(buffer) // skipcq GSC-G104
@@ -105,18 +105,18 @@ func (connector *Connector) registerFileRoutes() {
 		} else if !connector.Validate(w, r) {
 			return
 		}
-		// Get the server being accessed.
+		// Get the process being accessed.
 		id := mux.Vars(r)["id"]
-		server, err := connector.Processes.Get(id)
-		// In case the server doesn't exist.
+		process, err := connector.Processes.Get(id)
+		// In case the process doesn't exist.
 		if !err {
 			http.Error(w, "{\"error\":\"This server does not exist!\"}", http.StatusNotFound)
 			return
 		}
-		// Check if path is in the server directory or not.
-		filePath := joinPath(server.Directory, r.URL.Query().Get("path"))
+		// Check if path is in the process directory or not.
+		filePath := joinPath(process.Directory, r.URL.Query().Get("path"))
 		if (r.Method == "GET" || r.Method == "POST" || r.Method == "DELETE") &&
-			!strings.HasPrefix(filePath, path.Clean(server.Directory)) {
+			!strings.HasPrefix(filePath, path.Clean(process.Directory)) {
 			http.Error(w, "{\"error\":\"The file requested is outside the server!\"}", http.StatusForbidden)
 			return
 		}
@@ -174,7 +174,7 @@ func (connector *Connector) registerFileRoutes() {
 			}
 			defer file.Close()
 			// read the file.
-			toWrite, err := os.Create(joinPath(server.Directory, r.URL.Query().Get("path"), meta.Filename))
+			toWrite, err := os.Create(joinPath(process.Directory, r.URL.Query().Get("path"), meta.Filename))
 			stat, err1 := toWrite.Stat()
 			if err != nil {
 				http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
@@ -204,10 +204,10 @@ func (connector *Connector) registerFileRoutes() {
 				}
 				// Check if original file exists.
 				// TODO: Needs better sanitation.
-				oldpath := joinPath(server.Directory, operation[1])
-				newpath := joinPath(server.Directory, operation[2])
-				if !strings.HasPrefix(oldpath, path.Clean(server.Directory)) ||
-					!strings.HasPrefix(newpath, path.Clean(server.Directory)) {
+				oldpath := joinPath(process.Directory, operation[1])
+				newpath := joinPath(process.Directory, operation[2])
+				if !strings.HasPrefix(oldpath, path.Clean(process.Directory)) ||
+					!strings.HasPrefix(newpath, path.Clean(process.Directory)) {
 					http.Error(w, "{\"error\":\"The files requested are outside the server!\"}", http.StatusForbidden)
 					return
 				}
@@ -263,19 +263,19 @@ func (connector *Connector) registerFileRoutes() {
 		if !connector.Validate(w, r) {
 			return
 		}
-		// Get the server being accessed.
+		// Get the process being accessed.
 		id := mux.Vars(r)["id"]
-		server, err := connector.Processes.Get(id)
-		// In case the server doesn't exist.
+		process, err := connector.Processes.Get(id)
+		// In case the process doesn't exist.
 		if !err {
 			http.Error(w, "{\"error\":\"This server does not exist!\"}", http.StatusNotFound)
 			return
 		}
 		if r.Method == "POST" {
 			// Check if the folder already exists.
-			file := joinPath(server.Directory, r.URL.Query().Get("path"))
-			// Check if folder is in the server directory or not.
-			if !strings.HasPrefix(file, path.Clean(server.Directory)) {
+			file := joinPath(process.Directory, r.URL.Query().Get("path"))
+			// Check if folder is in the process directory or not.
+			if !strings.HasPrefix(file, path.Clean(process.Directory)) {
 				http.Error(w, "{\"error\":\"The folder requested is outside the server!\"}", http.StatusForbidden)
 				return
 			}
@@ -302,10 +302,10 @@ func (connector *Connector) registerFileRoutes() {
 		if !connector.Validate(w, r) {
 			return
 		}
-		// Get the server being accessed.
+		// Get the process being accessed.
 		id := mux.Vars(r)["id"]
-		server, err := connector.Processes.Get(id)
-		// In case the server doesn't exist.
+		process, err := connector.Processes.Get(id)
+		// In case the process doesn't exist.
 		if !err {
 			http.Error(w, "{\"error\":\"This server does not exist!\"}", http.StatusNotFound)
 			return
@@ -327,8 +327,8 @@ func (connector *Connector) registerFileRoutes() {
 			}
 			// Validate every path.
 			for _, file := range files {
-				filepath := joinPath(server.Directory, file)
-				if !strings.HasPrefix(filepath, path.Clean(server.Directory)) {
+				filepath := joinPath(process.Directory, file)
+				if !strings.HasPrefix(filepath, path.Clean(process.Directory)) {
 					http.Error(w, "{\"error\":\"One of the paths provided is outside the server directory!\"}", http.StatusForbidden)
 					return
 				} else if _, err := os.Stat(filepath); err != nil {
@@ -341,8 +341,8 @@ func (connector *Connector) registerFileRoutes() {
 				}
 			}
 			// Check if a file exists at the location of the ZIP file.
-			zipPath := joinPath(server.Directory, r.URL.Query().Get("path"))
-			if !strings.HasPrefix(zipPath, path.Clean(server.Directory)) {
+			zipPath := joinPath(process.Directory, r.URL.Query().Get("path"))
+			if !strings.HasPrefix(zipPath, path.Clean(process.Directory)) {
 				http.Error(w, "{\"error\":\"The requested ZIP file is outside the server directory!\"}", http.StatusForbidden)
 				return
 			}
@@ -363,7 +363,7 @@ func (connector *Connector) registerFileRoutes() {
 			defer archive.Close()
 			// Archive stuff inside.
 			for _, file := range files {
-				err := system.AddFileToZip(archive, server.Directory, file, r.Header.Get("compress") != "false")
+				err := system.AddFileToZip(archive, process.Directory, file, r.Header.Get("compress") != "false")
 				if err != nil {
 					http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
 					return
@@ -381,19 +381,19 @@ func (connector *Connector) registerFileRoutes() {
 		if !connector.Validate(w, r) {
 			return
 		}
-		// Get the server being accessed.
+		// Get the process being accessed.
 		id := mux.Vars(r)["id"]
-		server, err := connector.Processes.Get(id)
-		// In case the server doesn't exist.
+		process, err := connector.Processes.Get(id)
+		// In case the process doesn't exist.
 		if !err {
 			http.Error(w, "{\"error\":\"This server does not exist!\"}", http.StatusNotFound)
 			return
 		}
-		directory := path.Clean(server.Directory)
+		directory := path.Clean(process.Directory)
 		if r.Method == "POST" {
 			// Check if the ZIP file exists.
 			zipPath := joinPath(directory, r.URL.Query().Get("path"))
-			if !strings.HasPrefix(zipPath, path.Clean(server.Directory)) {
+			if !strings.HasPrefix(zipPath, path.Clean(process.Directory)) {
 				http.Error(w, "{\"error\":\"The ZIP file is outside the server directory!\"}", http.StatusForbidden)
 				return
 			}
@@ -412,8 +412,8 @@ func (connector *Connector) registerFileRoutes() {
 				http.Error(w, "{\"error\":\"Failed to read body!\"}", http.StatusBadRequest)
 				return
 			}
-			unpackPath := joinPath(server.Directory, body.String())
-			if !strings.HasPrefix(unpackPath, path.Clean(server.Directory)) {
+			unpackPath := joinPath(process.Directory, body.String())
+			if !strings.HasPrefix(unpackPath, path.Clean(process.Directory)) {
 				http.Error(w, "{\"error\":\"The ZIP file is outside the server directory!\"}", http.StatusForbidden)
 				return
 			}

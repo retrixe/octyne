@@ -19,7 +19,7 @@ import (
 )
 
 // An internal representation of Process along with the clients connected to it and its output.
-type server struct {
+type processInt struct {
 	*Process
 	Clients     map[string]chan []byte
 	Console     string
@@ -36,13 +36,13 @@ type Ticket struct {
 
 type processMap struct{ sync.Map }
 
-// Get gets a *server from a processMap by using sync.Map Load function and type-casting.
-func (p *processMap) Get(name string) (*server, bool) {
+// Get gets a *processInt from a processMap by using sync.Map Load function and type-casting.
+func (p *processMap) Get(name string) (*processInt, bool) {
 	item, err := p.Load(name)
 	if !err {
 		return nil, err
 	}
-	process, err := item.(*server)
+	process, err := item.(*processInt)
 	return process, err
 }
 
@@ -129,17 +129,17 @@ func InitializeConnector(config Config) *Connector {
 }
 
 // AddProcess adds a process to the connector to be accessed via the HTTP API.
-func (connector *Connector) AddProcess(process *Process) {
-	server := &server{
-		Process: process,
+func (connector *Connector) AddProcess(proc *Process) {
+	process := &processInt{
+		Process: proc,
 		Clients: make(map[string]chan []byte),
 		Console: "",
 	}
-	connector.Processes.Store(server.Name, server)
+	connector.Processes.Store(process.Name, process)
 	// Run a function which will monitor the console output of this process.
 	go (func() {
 		for {
-			scanner := bufio.NewScanner(server.Output)
+			scanner := bufio.NewScanner(process.Output)
 			scanner.Split(bufio.ScanLines)
 			buf := make([]byte, 0, 64*1024) // Support up to 1 MB lines.
 			scanner.Buffer(buf, 1024*1024)
@@ -148,21 +148,21 @@ func (connector *Connector) AddProcess(process *Process) {
 				// Truncate the console scrollback to 2500 to prevent excess memory usage and download cost.
 				// TODO: These limits aren't exactly the best, it maxes up to 2.5 GB.
 				(func() {
-					server.ConsoleLock.Lock()
-					defer server.ConsoleLock.Unlock()
-					truncate := strings.Split(server.Console, "\n")
+					process.ConsoleLock.Lock()
+					defer process.ConsoleLock.Unlock()
+					truncate := strings.Split(process.Console, "\n")
 					if len(truncate) >= 2500 {
-						server.Console = strings.Join(truncate[len(truncate)-2500:], "\n")
+						process.Console = strings.Join(truncate[len(truncate)-2500:], "\n")
 					}
-					server.Console = server.Console + "\n" + m
-					server.ClientsLock.RLock()
-					defer server.ClientsLock.RUnlock()
-					for _, connection := range server.Clients {
+					process.Console = process.Console + "\n" + m
+					process.ClientsLock.RLock()
+					defer process.ClientsLock.RUnlock()
+					for _, connection := range process.Clients {
 						connection <- []byte(m)
 					}
 				})()
 			}
-			log.Println("Error in " + server.Name + " console: " + scanner.Err().Error())
+			log.Println("Error in " + process.Name + " console: " + scanner.Err().Error())
 		}
 	})()
 }
@@ -224,7 +224,7 @@ func (connector *Connector) registerRoutes() {
 		// Get a map of servers and their online status.
 		servers := make(map[string]int)
 		connector.Processes.Range(func(k, v interface{}) bool {
-			servers[v.(*server).Name] = v.(*server).Online
+			servers[v.(*processInt).Name] = v.(*processInt).Online
 			return true
 		})
 		// Send the list.
