@@ -19,7 +19,7 @@ import (
 )
 
 // An internal representation of Process along with the clients connected to it and its output.
-type processInt struct {
+type managedProcess struct {
 	*Process
 	Clients     map[string]chan []byte
 	Console     string
@@ -37,12 +37,12 @@ type Ticket struct {
 type processMap struct{ sync.Map }
 
 // Get gets a *processInt from a processMap by using sync.Map Load function and type-casting.
-func (p *processMap) Get(name string) (*processInt, bool) {
+func (p *processMap) Get(name string) (*managedProcess, bool) {
 	item, err := p.Load(name)
 	if !err {
 		return nil, err
 	}
-	process, err := item.(*processInt)
+	process, err := item.(*managedProcess)
 	return process, err
 }
 
@@ -104,7 +104,7 @@ func InitializeConnector(config Config) *Connector {
 		GET /servers
 		GET /ott (one-time ticket)
 
-		- GET /server/{id} (FTP info, statistics e.g. server version, players online, uptime, CPU and RAM)
+		GET /server/{id} (~~FTP info~~, statistics e.g. ~~server version, players online~~, uptime, CPU and RAM)
 		POST /server/{id} (to start and stop a server)
 
 		WS /server/{id}/console?ticket=ticket
@@ -130,7 +130,7 @@ func InitializeConnector(config Config) *Connector {
 
 // AddProcess adds a process to the connector to be accessed via the HTTP API.
 func (connector *Connector) AddProcess(proc *Process) {
-	process := &processInt{
+	process := &managedProcess{
 		Process: proc,
 		Clients: make(map[string]chan []byte),
 		Console: "",
@@ -221,14 +221,14 @@ func (connector *Connector) registerRoutes() {
 		if !connector.Validate(w, r) {
 			return
 		}
-		// Get a map of servers and their online status.
-		servers := make(map[string]int)
+		// Get a map of processes and their online status.
+		processes := make(map[string]int)
 		connector.Processes.Range(func(k, v interface{}) bool {
-			servers[v.(*processInt).Name] = v.(*processInt).Online
+			processes[v.(*managedProcess).Name] = v.(*managedProcess).Online
 			return true
 		})
 		// Send the list.
-		json.NewEncoder(w).Encode(serversResponse{Servers: servers}) // skipcq GSC-G104
+		json.NewEncoder(w).Encode(serversResponse{Servers: processes}) // skipcq GSC-G104
 	})
 
 	// GET /ott
@@ -274,10 +274,10 @@ func (connector *Connector) registerRoutes() {
 		if !connector.Validate(w, r) {
 			return
 		}
-		// Get the server being accessed.
+		// Get the process being accessed.
 		id := mux.Vars(r)["id"]
 		process, err := connector.Processes.Get(id)
-		// In case the server doesn't exist.
+		// In case the process doesn't exist.
 		if !err {
 			http.Error(w, "{\"error\":\"This server does not exist!\"}", http.StatusNotFound)
 			return
@@ -385,11 +385,11 @@ func (connector *Connector) registerRoutes() {
 			defer close(writeToWs)
 			go (func() {
 				for {
-					if data, ok := <-writeToWs; !ok {
+					data, ok := <-writeToWs
+					if !ok {
 						break
-					} else {
-						c.WriteMessage(websocket.TextMessage, data) // skipcq GSC-G104
 					}
+					c.WriteMessage(websocket.TextMessage, data) // skipcq GSC-G104
 				}
 			})()
 			// Add connection to the process after sending current console output.
@@ -421,9 +421,8 @@ func (connector *Connector) registerRoutes() {
 					defer process.ClientsLock.Unlock()
 					delete(process.Clients, token)
 					break // The WebSocket connection has terminated.
-				} else {
-					process.SendCommand(string(message))
 				}
+				process.SendCommand(string(message))
 			}
 		}
 	})
