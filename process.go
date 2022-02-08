@@ -49,7 +49,7 @@ func CreateProcess(name string, config ServerConfig, connector *Connector) *Proc
 // StartProcess starts the process.
 func (process *Process) StartProcess() error {
 	name := process.Name
-	log.Println("Starting process (" + name + ")")
+	info.Println("Starting process (" + name + ")")
 	// Determine the command which should be run by Go and change the working directory.
 	cmd := strings.Split(process.ServerConfig.Command, " ")
 	command := exec.Command(cmd[0], cmd[1:]...)
@@ -72,7 +72,7 @@ func (process *Process) StartProcess() error {
 		stdout.ReadFrom(process.Output)
 		log.Println("Output:\n" + stdout.String())
 	} else {
-		log.Println("Started process " + name + " with PID " + strconv.Itoa(command.Process.Pid))
+		info.Println("Started process " + name + " with PID " + strconv.Itoa(command.Process.Pid))
 		process.SendConsoleOutput("[Octyne] Started process " + name)
 		process.Online = 1
 		process.Uptime = time.Now().UnixNano()
@@ -85,7 +85,7 @@ func (process *Process) StartProcess() error {
 
 // StopProcess stops the process.
 func (process *Process) StopProcess() {
-	log.Println("Stopping process " + process.Name)
+	info.Println("Stopping process " + process.Name)
 	process.SendConsoleOutput("[Octyne] Stopping process " + process.Name)
 	command := process.Command
 	// Stop the command.
@@ -122,14 +122,14 @@ func (process *Process) MonitorProcess() error {
 		process.Online = 0
 		process.Uptime = 0
 		process.Crashes = 0
-		log.Println("Process " + process.Name + " has stopped.")
+		info.Println("Process " + process.Name + " has stopped.")
 		process.SendConsoleOutput("[Octyne] Process " + process.Name + " has stopped.")
 	} else {
 		process.Online = 2
 		process.Uptime = 0
 		process.Crashes++
 		process.SendConsoleOutput("[Octyne] Process " + process.Name + " has crashed!")
-		log.Println("Process" + process.Name + " has crashed!")
+		info.Println("Process" + process.Name + " has crashed!")
 		if process.Crashes <= 3 {
 			process.SendConsoleOutput("[Octyne] Restarting process " + process.Name + " due to default behaviour.")
 			process.StartProcess()

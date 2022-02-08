@@ -21,12 +21,16 @@ func getPort(config Config) string {
 	return ":" + strconv.Itoa(int(config.Port))
 }
 
+var info *log.Logger
+
 func main() {
 	if len(os.Args) >= 2 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
 		println("octyne version " + OctyneVersion)
 		return
 	}
+	log.SetOutput(os.Stderr)
 	log.SetPrefix("[Octyne] ")
+	info = log.New(os.Stdout, "[Octyne] ", log.Flags())
 
 	// Read config.
 	var config Config
@@ -45,7 +49,7 @@ func main() {
 	for k := range config.Servers {
 		servers = append(servers, k)
 	}
-	log.Println("Config read successfully!")
+	info.Println("Config read successfully!")
 
 	// Setup daemon connector.
 	connector := InitializeConnector(config)
@@ -59,7 +63,7 @@ func main() {
 
 	// Listen.
 	port := getPort(config)
-	log.Println("Listening to port " + port[1:])
+	info.Println("Listening to port " + port[1:])
 	handler := handlers.CORS(
 		handlers.AllowedHeaders([]string{
 			"X-Requested-With", "Content-Type", "Authorization", "Username", "Password",
