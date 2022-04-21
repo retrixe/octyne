@@ -27,19 +27,19 @@ type Authenticator interface {
 
 // RedisAuthenticator is an Authenticator implementation using Redis to store tokens.
 type RedisAuthenticator struct {
-	Config
+	*Config
 	Redis *redis.Pool
 }
 
 // MemoryAuthenticator is an Authenticator implementation using an array to store tokens.
 type MemoryAuthenticator struct {
-	Config
+	*Config
 	TokenMutex sync.RWMutex
 	Tokens     map[string]string
 }
 
 // InitializeAuthenticator initializes an authenticator.
-func InitializeAuthenticator(config Config) Authenticator {
+func InitializeAuthenticator(config *Config) Authenticator {
 	// If Redis, create a Redis connection.
 	if config.Redis.Enabled {
 		return InitializeRedisAuthenticator(config)
@@ -53,7 +53,7 @@ func InitializeAuthenticator(config Config) Authenticator {
 }
 
 // InitializeRedisAuthenticator initializes an authenticator using Redis.
-func InitializeRedisAuthenticator(config Config) Authenticator {
+func InitializeRedisAuthenticator(config *Config) Authenticator {
 	pool := &redis.Pool{
 		Wait:      true,
 		MaxIdle:   5,

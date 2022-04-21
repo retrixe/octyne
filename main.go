@@ -14,7 +14,7 @@ import (
 // OctyneVersion is the last version of Octyne this code is based on.
 const OctyneVersion = "1.0.2"
 
-func getPort(config Config) string {
+func getPort(config *Config) string {
 	if config.Port == 0 {
 		return ":42069"
 	}
@@ -52,7 +52,7 @@ func main() {
 	info.Println("Config read successfully!")
 
 	// Setup daemon connector.
-	connector := InitializeConnector(config)
+	connector := InitializeConnector(&config)
 	// This defer never actually gets called, hence commented.
 	// if connector.Authenticator.Redis != nil { defer connector.Authenticator.Redis.Close() }
 
@@ -62,7 +62,7 @@ func main() {
 	}
 
 	// Listen.
-	port := getPort(config)
+	port := getPort(&config)
 	info.Println("Listening to port " + port[1:])
 	handler := handlers.CORS(
 		handlers.AllowedHeaders([]string{

@@ -48,7 +48,7 @@ func (p *processMap) Get(name string) (*managedProcess, bool) {
 
 // Connector is used to create an HTTP API for external apps to talk with octyne.
 type Connector struct {
-	Config
+	*Config
 	Authenticator
 	*mux.Router
 	*websocket.Upgrader
@@ -85,7 +85,7 @@ func GetIP(r *http.Request) string {
 }
 
 // InitializeConnector initializes a connector to create an HTTP API for interaction.
-func InitializeConnector(config Config) *Connector {
+func InitializeConnector(config *Config) *Connector {
 	// Create the connector.
 	connector := &Connector{
 		Config:        config,
@@ -100,28 +100,24 @@ func InitializeConnector(config Config) *Connector {
 		All routes:
 		GET /login
 		GET /logout
-
-		GET /servers
 		GET /ott (one-time ticket)
 
-		GET /server/{id} (~~FTP info~~, statistics e.g. ~~server version, players online~~, uptime, CPU and RAM)
+		GET /servers
+
+		GET /server/{id} (statistics like uptime, CPU and RAM)
 		POST /server/{id} (to start and stop a server)
 
 		WS /server/{id}/console?ticket=ticket
 
 		GET /server/{id}/files?path=path
-
 		GET /server/{id}/file?path=path&ticket=ticket
 		POST /server/{id}/file?path=path (takes a form file with the file name, path= is path to folder)
+		POST /server/{id}/folder?path=path
 		DELETE /server/{id}/file?path=path
 		PATCH /server/{id}/file (moving files, copying files and renaming them)
 
 		POST /server/{id}/compress?path=path&compress=true/false (compress is optional, default: true)
 		POST /server/{id}/decompress?path=path
-
-		POST /server/{id}/folder?path=path
-
-		NOTE: All routes marked with - are incomplete.
 	*/
 	connector.registerRoutes()
 	connector.registerFileRoutes()

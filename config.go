@@ -32,7 +32,7 @@ type ServerConfig struct {
 
 // UnmarshalJSON unmarshals ServerConfig and sets default value for the Enabled property.
 func (c *ServerConfig) UnmarshalJSON(data []byte) error {
-	type alias ServerConfig
+	type alias ServerConfig // Prevent recursive calls to UnmarshalJSON.
 	conf := &alias{Enabled: true}
 	err := json.Unmarshal(data, conf)
 	*c = ServerConfig(*conf)

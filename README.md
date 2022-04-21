@@ -1,6 +1,6 @@
 # octyne
 
-A process manager with an HTTP API for console and file access.
+A process manager with an HTTP API for remote console and file access.
 
 Octyne allows running multiple apps on a remote server and providing an HTTP API to manage them. This allows for hosting web servers, game servers, bots and so on on remote servers without having to mess with SSH, using `screen` and `systemd` whenever you want to make any change, in a highly manageable and secure way.
 
@@ -10,7 +10,7 @@ It incorporates the ability to manage files and access the terminal output and i
 
 ## Configuration
 
-Octyne depends on two files in the same directory to get configuration from.
+Octyne depends on two files in the same directory to get configuration from. Note that Octyne refers to apps as "servers" in the config and API for legacy reasons (due to originally being targeted towards web servers and Minecraft servers).
 
 ### config.json
 
