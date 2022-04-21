@@ -38,18 +38,46 @@ type MemoryAuthenticator struct {
 	Tokens     map[string]string
 }
 
-// InitializeAuthenticator initializes an authenticator.
+// ReplaceableAuthenticator is an Authenticator implementation that allows replacing
+// the underlying Authenticator in a thread-safe manner on the fly.
+type ReplaceableAuthenticator struct {
+	Engine      Authenticator
+	EngineMutex sync.RWMutex
+}
+
+// Validate is called on an HTTP API request and checks whether or not the user is authenticated.
+func (a *ReplaceableAuthenticator) Validate(w http.ResponseWriter, r *http.Request) bool {
+	a.EngineMutex.RLock()
+	defer a.EngineMutex.RUnlock()
+	return a.Engine.Validate(w, r)
+}
+
+// Login allows logging in a user and returning the token.
+func (a *ReplaceableAuthenticator) Login(username string, password string) string {
+	a.EngineMutex.RLock()
+	defer a.EngineMutex.RUnlock()
+	return a.Engine.Login(username, password)
+}
+
+// Logout allows logging out of a user and deleting the token from the server.
+func (a *ReplaceableAuthenticator) Logout(token string) bool {
+	a.EngineMutex.RLock()
+	defer a.EngineMutex.RUnlock()
+	return a.Engine.Logout(token)
+}
+
+// InitializeAuthenticator initializes an authenticator wrapped with ReplaceableAuthenticator.
 func InitializeAuthenticator(config *Config) Authenticator {
 	// If Redis, create a Redis connection.
 	if config.Redis.Enabled {
-		return InitializeRedisAuthenticator(config)
+		return &ReplaceableAuthenticator{Engine: InitializeRedisAuthenticator(config)}
 	}
 	// Create the authenticator.
 	authenticator := &MemoryAuthenticator{
 		Config: config,
 		Tokens: make(map[string]string),
 	}
-	return authenticator
+	return &ReplaceableAuthenticator{Engine: authenticator}
 }
 
 // InitializeRedisAuthenticator initializes an authenticator using Redis.
@@ -66,8 +94,7 @@ func InitializeRedisAuthenticator(config *Config) Authenticator {
 			return conn, err
 		},
 	}
-	authenticator := &RedisAuthenticator{Config: config, Redis: pool}
-	return authenticator
+	return &RedisAuthenticator{Config: config, Redis: pool}
 }
 
 func getTokenFromRequest(r *http.Request) string {
