@@ -138,12 +138,12 @@ func checkValidLoginAndGenerateToken(username string, password string) string {
 	var users map[string]string
 	contents, err := ioutil.ReadFile("users.json")
 	if err != nil {
-		log.Println("An error occurred while attempting to read users.json!\n" + err.Error())
+		log.Println("An error occurred while attempting to read users.json! " + err.Error())
 		return ""
 	}
 	err = json.Unmarshal(contents, &users)
 	if err != nil {
-		log.Println("An error occurred while attempting to read users.json!\n" + err.Error())
+		log.Println("An error occurred while attempting to read users.json! " + err.Error())
 		return ""
 	}
 	// Check whether this user exists.

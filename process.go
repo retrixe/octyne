@@ -62,18 +62,18 @@ func (process *Process) StartProcess() error {
 	// Check for errors.
 	process.Online = 2
 	if err != nil {
-		log.Println("Failed to start process " + name + "! The following error occured:\n" + err.Error())
+		log.Println("Failed to start server " + name + "! The following error occured: " + err.Error())
 	} else if _, err := os.FindProcess(command.Process.Pid); err != nil /* Windows */ ||
 		// command.Process.Signal(syscall.Signal(0)) != nil /* Unix, disabled */ ||
 		command.ProcessState != nil /* Universal */ {
-		log.Println("Process " + name + " is not online!")
+		log.Println("Server " + name + " is not online!")
 		// Get the stdout and stderr and log..
 		var stdout bytes.Buffer
 		stdout.ReadFrom(process.Output)
 		log.Println("Output:\n" + stdout.String())
 	} else {
-		info.Println("Started process " + name + " with PID " + strconv.Itoa(command.Process.Pid))
-		process.SendConsoleOutput("[Octyne] Started process " + name)
+		info.Println("Started server " + name + " with PID " + strconv.Itoa(command.Process.Pid))
+		process.SendConsoleOutput("[Octyne] Started server " + name)
 		process.Online = 1
 		process.Uptime = time.Now().UnixNano()
 	}
@@ -85,13 +85,13 @@ func (process *Process) StartProcess() error {
 
 // StopProcess stops the process.
 func (process *Process) StopProcess() {
-	info.Println("Stopping process " + process.Name)
-	process.SendConsoleOutput("[Octyne] Stopping process " + process.Name)
+	info.Println("Stopping server " + process.Name)
+	process.SendConsoleOutput("[Octyne] Stopping server " + process.Name)
 	command := process.Command
 	// Stop the command.
 	command.Process.Kill()
 	process.Online = 0
-	// process.SendConsoleOutput("[Octyne] Stopped process " + process.Name)
+	// process.SendConsoleOutput("[Octyne] Stopped server " + process.Name)
 }
 
 // SendCommand sends an input to stdin of the process.
@@ -122,16 +122,16 @@ func (process *Process) MonitorProcess() error {
 		process.Online = 0
 		process.Uptime = 0
 		process.Crashes = 0
-		info.Println("Process " + process.Name + " has stopped.")
-		process.SendConsoleOutput("[Octyne] Process " + process.Name + " has stopped.")
+		info.Println("Server " + process.Name + " has stopped.")
+		process.SendConsoleOutput("[Octyne] Server " + process.Name + " has stopped.")
 	} else {
 		process.Online = 2
 		process.Uptime = 0
 		process.Crashes++
-		process.SendConsoleOutput("[Octyne] Process " + process.Name + " has crashed!")
+		process.SendConsoleOutput("[Octyne] Server " + process.Name + " has crashed!")
 		info.Println("Process" + process.Name + " has crashed!")
 		if process.Crashes <= 3 {
-			process.SendConsoleOutput("[Octyne] Restarting process " + process.Name + " due to default behaviour.")
+			process.SendConsoleOutput("[Octyne] Restarting server " + process.Name + " due to default behaviour.")
 			process.StartProcess()
 		}
 	}

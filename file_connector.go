@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path"
@@ -155,6 +156,7 @@ func (connector *Connector) registerFileRoutes() {
 				http.Error(w, "{\"error\":\""+err.(*os.PathError).Err.Error()+"\"}", http.StatusConflict)
 				return
 			} else if err != nil {
+				log.Println("An error occurred when removing "+filePath, "("+process.Name+")", err)
 				http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
 				return
 			}
@@ -174,9 +176,11 @@ func (connector *Connector) registerFileRoutes() {
 			}
 			defer file.Close()
 			// read the file.
-			toWrite, err := os.Create(joinPath(process.Directory, r.URL.Query().Get("path"), meta.Filename))
+			filePath = joinPath(process.Directory, r.URL.Query().Get("path"), meta.Filename)
+			toWrite, err := os.Create(filePath)
 			stat, err1 := toWrite.Stat()
 			if err != nil {
+				log.Println("An error occurred when writing to "+filePath, "("+process.Name+")", err)
 				http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
 				return
 			} else if err1 == nil && stat.IsDir() {
@@ -216,6 +220,7 @@ func (connector *Connector) registerFileRoutes() {
 					http.Error(w, "{\"error\":\"This file does not exist!\"}", http.StatusNotFound)
 					return
 				} else if err != nil {
+					log.Println("An error occurred in mv/cp API when checking for "+oldpath, "("+process.Name+")", err)
 					http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
 					return
 				}
@@ -226,6 +231,7 @@ func (connector *Connector) registerFileRoutes() {
 					http.Error(w, "{\"error\":\"This file already exists!\"}", http.StatusMethodNotAllowed)
 					return
 				} else if err != nil && !os.IsNotExist(err) {
+					log.Println("An error occurred in mv/cp API when checking for "+newpath, "("+process.Name+")", err)
 					http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
 					return
 				}
@@ -237,6 +243,7 @@ func (connector *Connector) registerFileRoutes() {
 						http.Error(w, "{\"error\":\""+err.(*os.LinkError).Err.Error()+"\"}", http.StatusConflict)
 						return
 					} else if err != nil {
+						log.Println("An error occurred when moving "+oldpath+" to "+newpath, "("+process.Name+")", err)
 						http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
 						return
 					}
@@ -244,6 +251,7 @@ func (connector *Connector) registerFileRoutes() {
 				} else {
 					err := system.Copy(stat, oldpath, newpath)
 					if err != nil {
+						log.Println("An error occurred when copying "+oldpath+" to "+newpath, "("+process.Name+")", err)
 						http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
 						return
 					}
@@ -287,6 +295,7 @@ func (connector *Connector) registerFileRoutes() {
 			// Create the folder.
 			err = os.Mkdir(file, os.ModePerm)
 			if err != nil {
+				log.Println("An error occurred when creating folder "+file, "("+process.Name+")", err)
 				http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
 				return
 			}
@@ -335,6 +344,7 @@ func (connector *Connector) registerFileRoutes() {
 					if os.IsNotExist(err) {
 						http.Error(w, "{\"error\":\"The file "+file+" does not exist!\"}", http.StatusBadRequest)
 					} else {
+						log.Println("An error occurred when checking "+filepath+" exists for compression", "("+process.Name+")", err)
 						http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
 					}
 					return
@@ -355,6 +365,7 @@ func (connector *Connector) registerFileRoutes() {
 			// Begin compressing a ZIP.
 			zipFile, err := os.Create(zipPath)
 			if err != nil {
+				log.Println("An error occurred when creating "+zipPath+" for compression", "("+process.Name+")", err)
 				http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
 				return
 			}
@@ -362,9 +373,10 @@ func (connector *Connector) registerFileRoutes() {
 			archive := zip.NewWriter(zipFile)
 			defer archive.Close()
 			// Archive stuff inside.
-			for _, file := range files {
+			for _, file := range files { // TODO: Why is parent always process.Directory?
 				err := system.AddFileToZip(archive, process.Directory, file, r.Header.Get("compress") != "false")
 				if err != nil {
+					log.Println("An error occurred when adding "+file+" to "+zipPath, "("+process.Name+")", err)
 					http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
 					return
 				}
@@ -402,6 +414,7 @@ func (connector *Connector) registerFileRoutes() {
 				http.Error(w, "{\"error\":\"The requested ZIP does not exist!\"}", http.StatusBadRequest)
 				return
 			} else if exists != nil {
+				log.Println("An error occurred when checking "+zipPath+" ZIP file exists", "("+process.Name+")", err)
 				http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
 				return
 			}
@@ -417,14 +430,16 @@ func (connector *Connector) registerFileRoutes() {
 				http.Error(w, "{\"error\":\"The ZIP file is outside the server directory!\"}", http.StatusForbidden)
 				return
 			}
-			stat, exists := os.Stat(unpackPath)
-			if os.IsNotExist(exists) {
-				err := os.Mkdir(unpackPath, os.ModePerm)
+			stat, err := os.Stat(unpackPath)
+			if os.IsNotExist(err) {
+				err = os.Mkdir(unpackPath, os.ModePerm)
 				if err != nil {
+					log.Println("An error occurred when creating "+unpackPath+" to unpack ZIP", "("+process.Name+")", err)
 					http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
 					return
 				}
-			} else if exists != nil {
+			} else if err != nil {
+				log.Println("An error occurred when checking "+unpackPath+" exists to unpack ZIP to", "("+process.Name+")", err)
 				http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
 				return
 			} else if !stat.IsDir() {

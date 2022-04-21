@@ -36,12 +36,12 @@ func main() {
 	var config Config
 	file, err := os.Open("config.json")
 	if err != nil {
-		panic("An error occurred while attempting to read config!\n" + err.Error())
+		panic("An error occurred while attempting to read config! " + err.Error())
 	}
 	contents, _ := ioutil.ReadAll(file)
 	err = json.Unmarshal(contents, &config)
 	if err != nil {
-		panic("An error occurred while attempting to read config!\n" + err.Error())
+		panic("An error occurred while attempting to read config! " + err.Error())
 	}
 
 	// Get a slice of server names.

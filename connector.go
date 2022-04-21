@@ -324,7 +324,8 @@ func (connector *Connector) registerRoutes() {
 				var err error
 				stat, err = system.GetProcessStats(process.Command.Process.Pid)
 				if err != nil {
-					http.Error(w, "{\"error\":\"Internal Server Error! Is `ps` installed?\"}",
+					log.Println("Failed to get server statistics for "+process.Name+"! Is ps available?", err)
+					http.Error(w, "{\"error\":\"Internal Server Error!\"}",
 						http.StatusInternalServerError)
 					return
 				}
