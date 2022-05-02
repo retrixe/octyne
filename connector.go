@@ -217,7 +217,7 @@ func (connector *Connector) registerRoutes() {
 		if !connector.Validate(w, r) {
 			return
 		}
-		// Read config.
+		// Read the new config.
 		var config Config
 		file, err := os.Open("config.json")
 		if err != nil {
@@ -240,14 +240,28 @@ func (connector *Connector) registerRoutes() {
 		if usingRedis != config.Redis.Enabled || (usingRedis && redisAuth.Config.Redis.URL != config.Redis.URL) {
 			replaceableAuthenticator.Engine = InitializeAuthenticator(&config).(*ReplaceableAuthenticator).Engine
 		}
-		/*
-			TODO for config reload feature completion:
-			- if port/https changes, restart HTTP server (implement HTTP server restart)
-			- if a server is removed, immediately delete/future: mark it for deletion once it stops
-			- if a server is changed, edit its config (use atomic config?)
-			- if a server is added, register it
-			- wtf is connector.Config for
-		*/
+		// Add new processes.
+		for key := range config.Servers {
+			if _, ok := connector.Processes.Get(key); !ok {
+				go CreateProcess(key, config.Servers[key], connector)
+			}
+		}
+		// Remove existing processes. (LOW-TODO: Mark for deletion intead of removing instantly.)
+		connector.Processes.Range(func(key, value interface{}) bool {
+			if _, ok := config.Servers[key.(string)]; !ok {
+				value, loaded := connector.Processes.LoadAndDelete(value) // Yes, this is safe.
+				if loaded {
+					value.(*managedProcess).StopProcess() // Other goroutines will cleanup.
+					for _, ws := range value.(*managedProcess).Clients {
+						close(ws) // Attempt to disconnect WebSocket clients.
+					}
+				}
+			}
+			return true
+		})
+		// TODO: if port/https changes, restart HTTP server (implement HTTP server restart)
+		// TODO: if a server is changed, edit its config (use atomic config?)
+		// TODO: wtf is connector.Config for
 		// Send the response.
 		fmt.Fprint(w, "{\"success\":false}")
 	})
@@ -428,6 +442,7 @@ func (connector *Connector) registerRoutes() {
 				for {
 					data, ok := <-writeToWs
 					if !ok {
+						c.Close()
 						break
 					}
 					c.WriteMessage(websocket.TextMessage, data) // skipcq GSC-G104
