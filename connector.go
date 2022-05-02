@@ -7,8 +7,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -99,6 +101,8 @@ func InitializeConnector(config *Config) *Connector {
 		GET /login
 		GET /logout
 		GET /ott (one-time ticket)
+
+		POST /config/reload
 
 		GET /servers
 
@@ -205,6 +209,47 @@ func (connector *Connector) registerRoutes() {
 		}
 		// Send the response.
 		fmt.Fprint(w, "{\"success\":true}")
+	})
+
+	// POST /config/reload
+	connector.Router.HandleFunc("/config/reload", func(w http.ResponseWriter, r *http.Request) {
+		// Check with authenticator.
+		if !connector.Validate(w, r) {
+			return
+		}
+		// Read config.
+		var config Config
+		file, err := os.Open("config.json")
+		if err != nil {
+			log.Println("An error occurred while attempting to read config! " + err.Error())
+			http.Error(w, "{\"error\":\"An error occurred while reading config!\"}", http.StatusInternalServerError)
+			return
+		}
+		contents, _ := ioutil.ReadAll(file)
+		err = json.Unmarshal(contents, &config)
+		if err != nil {
+			log.Println("An error occurred while attempting to read config! " + err.Error())
+			http.Error(w, "{\"error\":\"An error occurred while reading config!\"}", http.StatusInternalServerError)
+			return
+		}
+		// Replace authenticator if changed. We are guaranteed that Authenticator is Replaceable.
+		replaceableAuthenticator := connector.Authenticator.(*ReplaceableAuthenticator)
+		replaceableAuthenticator.EngineMutex.Lock()
+		defer replaceableAuthenticator.EngineMutex.Unlock()
+		redisAuth, usingRedis := replaceableAuthenticator.Engine.(*RedisAuthenticator)
+		if usingRedis != config.Redis.Enabled || (usingRedis && redisAuth.Config.Redis.URL != config.Redis.URL) {
+			replaceableAuthenticator.Engine = InitializeAuthenticator(&config).(*ReplaceableAuthenticator).Engine
+		}
+		/*
+			TODO for config reload feature completion:
+			- if port/https changes, restart HTTP server (implement HTTP server restart)
+			- if a server is removed, immediately delete/future: mark it for deletion once it stops
+			- if a server is changed, edit its config (use atomic config?)
+			- if a server is added, register it
+			- wtf is connector.Config for
+		*/
+		// Send the response.
+		fmt.Fprint(w, "{\"success\":false}")
 	})
 
 	// GET /servers
