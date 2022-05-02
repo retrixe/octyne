@@ -228,8 +228,8 @@ func (connector *Connector) registerRoutes() {
 		contents, _ := ioutil.ReadAll(file)
 		err = json.Unmarshal(contents, &config)
 		if err != nil {
-			log.Println("An error occurred while attempting to read config! " + err.Error())
-			http.Error(w, "{\"error\":\"An error occurred while reading config!\"}", http.StatusInternalServerError)
+			log.Println("An error occurred while attempting to parse config! " + err.Error())
+			http.Error(w, "{\"error\":\"An error occurred while parsing config!\"}", http.StatusInternalServerError)
 			return
 		}
 		// Replace authenticator if changed. We are guaranteed that Authenticator is Replaceable.
@@ -246,11 +246,15 @@ func (connector *Connector) registerRoutes() {
 				go CreateProcess(key, config.Servers[key], connector)
 			}
 		}
-		// Remove existing processes. (LOW-TODO: Mark for deletion intead of removing instantly.)
+		// Modify/remove existing processes.
 		connector.Processes.Range(func(key, value interface{}) bool {
-			if _, ok := config.Servers[key.(string)]; !ok {
-				value, loaded := connector.Processes.LoadAndDelete(value) // Yes, this is safe.
-				if loaded {
+			serverConfig, ok := config.Servers[key.(string)]
+			if ok {
+				value.(*managedProcess).Process.ServerConfigMutex.Lock()
+				defer value.(*managedProcess).Process.ServerConfigMutex.Unlock()
+				value.(*managedProcess).Process.ServerConfig = serverConfig
+			} else {
+				if value, loaded := connector.Processes.LoadAndDelete(value); loaded { // Yes, this is safe.
 					value.(*managedProcess).StopProcess() // Other goroutines will cleanup.
 					for _, ws := range value.(*managedProcess).Clients {
 						close(ws) // Attempt to disconnect WebSocket clients.
@@ -259,11 +263,8 @@ func (connector *Connector) registerRoutes() {
 			}
 			return true
 		})
-		// TODO: if port/https changes, restart HTTP server (implement HTTP server restart)
-		// TODO: if a server is changed, edit its config (use atomic config?)
-		// TODO: wtf is connector.Config for
 		// Send the response.
-		fmt.Fprint(w, "{\"success\":false}")
+		fmt.Fprint(w, "{\"success\":true}")
 	})
 
 	// GET /servers

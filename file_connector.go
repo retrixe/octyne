@@ -45,6 +45,8 @@ func (connector *Connector) registerFileRoutes() {
 			return
 		}
 		// Check if folder is in the process directory or not.
+		process.ServerConfigMutex.RLock()
+		defer process.ServerConfigMutex.RUnlock()
 		folderPath := joinPath(process.Directory, r.URL.Query().Get("path"))
 		if !strings.HasPrefix(folderPath, path.Clean(process.Directory)) {
 			http.Error(w, "{\"error\":\"The folder requested is outside the server!\"}", http.StatusForbidden)
@@ -115,6 +117,8 @@ func (connector *Connector) registerFileRoutes() {
 			return
 		}
 		// Check if path is in the process directory or not.
+		process.ServerConfigMutex.RLock()
+		defer process.ServerConfigMutex.RUnlock()
 		filePath := joinPath(process.Directory, r.URL.Query().Get("path"))
 		if (r.Method == "GET" || r.Method == "POST" || r.Method == "DELETE") &&
 			!strings.HasPrefix(filePath, path.Clean(process.Directory)) {
@@ -281,6 +285,8 @@ func (connector *Connector) registerFileRoutes() {
 		}
 		if r.Method == "POST" {
 			// Check if the folder already exists.
+			process.ServerConfigMutex.RLock()
+			defer process.ServerConfigMutex.RUnlock()
 			file := joinPath(process.Directory, r.URL.Query().Get("path"))
 			// Check if folder is in the process directory or not.
 			if !strings.HasPrefix(file, path.Clean(process.Directory)) {
@@ -335,6 +341,8 @@ func (connector *Connector) registerFileRoutes() {
 				return
 			}
 			// Validate every path.
+			process.ServerConfigMutex.RLock()
+			defer process.ServerConfigMutex.RUnlock()
 			for _, file := range files {
 				filepath := joinPath(process.Directory, file)
 				if !strings.HasPrefix(filepath, path.Clean(process.Directory)) {
@@ -401,6 +409,8 @@ func (connector *Connector) registerFileRoutes() {
 			http.Error(w, "{\"error\":\"This server does not exist!\"}", http.StatusNotFound)
 			return
 		}
+		process.ServerConfigMutex.RLock()
+		defer process.ServerConfigMutex.RUnlock()
 		directory := path.Clean(process.Directory)
 		if r.Method == "POST" {
 			// Check if the ZIP file exists.
