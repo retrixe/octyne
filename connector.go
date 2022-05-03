@@ -174,7 +174,7 @@ func (connector *Connector) registerRoutes() {
 	// POST /accounts
 	// PATCH /accounts
 	// DELETE /accounts
-	type postAccountsRequestBody struct {
+	type accountsRequestBody struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
 	}
@@ -189,7 +189,7 @@ func (connector *Connector) registerRoutes() {
 				http.Error(w, "{\"error\":\"Failed to read body!\"}", http.StatusBadRequest)
 				return
 			}
-			var body postAccountsRequestBody
+			var body accountsRequestBody
 			err = json.Unmarshal(buffer.Bytes(), &body)
 			if err != nil {
 				http.Error(w, "{\"error\":\"Invalid JSON body!\"}", http.StatusBadRequest)
@@ -218,6 +218,92 @@ func (connector *Connector) registerRoutes() {
 			}
 			sha256sum := fmt.Sprintf("%x", sha256.Sum256([]byte(body.Password)))
 			users[body.Username] = sha256sum
+			account, err := json.MarshalIndent(users, "", " ")
+			if err != nil {
+				log.Println("Error serialising users.json when modifying accounts!")
+				http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
+				return
+			}
+			err = ioutil.WriteFile("users.json", []byte(account), 0644)
+			if err != nil {
+				log.Println("Error writing to users.json when modifying accounts!")
+				http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
+				return
+			}
+			fmt.Fprint(w, "{\"success\": true}")
+		} else if r.Method == "PATCH" {
+			var buffer bytes.Buffer
+			_, err := buffer.ReadFrom(r.Body)
+			if err != nil {
+				http.Error(w, "{\"error\":\"Failed to read body!\"}", http.StatusBadRequest)
+				return
+			}
+			var body accountsRequestBody
+			err = json.Unmarshal(buffer.Bytes(), &body)
+			if err != nil {
+				http.Error(w, "{\"error\":\"Invalid JSON body!\"}", http.StatusBadRequest)
+				return
+			}
+			if body.Username == "" || body.Password == "" {
+				http.Error(w, "{\"error\":\"Username or password not provided!\"}", http.StatusBadRequest)
+				return
+			}
+			var users map[string]string
+			contents, err := ioutil.ReadFile("users.json")
+			if err != nil {
+				log.Println("Error reading users.json when modifying accounts!", err)
+				http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
+				return
+			}
+			err = json.Unmarshal(contents, &users)
+			if err != nil {
+				log.Println("Error parsing users.json when modifying accounts!", err)
+				http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
+				return
+			}
+			if users[body.Username] == "" {
+				http.Error(w, "{\"error\":\"User does not exist!\"}", http.StatusConflict)
+				return
+			}
+			sha256sum := fmt.Sprintf("%x", sha256.Sum256([]byte(body.Password)))
+			users[body.Username] = sha256sum
+			account, err := json.MarshalIndent(users, "", " ")
+			if err != nil {
+				log.Println("Error serialising users.json when modifying accounts!")
+				http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
+				return
+			}
+			err = ioutil.WriteFile("users.json", []byte(account), 0644)
+			if err != nil {
+				log.Println("Error writing to users.json when modifying accounts!")
+				http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
+				return
+			}
+			fmt.Fprint(w, "{\"success\": true}")
+		} else if r.Method == "DELETE" {
+			var username = r.URL.Query().Get("username")
+			if username == "" {
+				http.Error(w, "{\"error\":\"Username not provided!\"}", http.StatusBadRequest)
+				return
+			}
+			var users map[string]string
+			contents, err := ioutil.ReadFile("users.json")
+			if err != nil {
+				log.Println("Error reading users.json when modifying accounts!", err)
+				http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
+				return
+			}
+			err = json.Unmarshal(contents, &users)
+			if err != nil {
+				log.Println("Error parsing users.json when modifying accounts!", err)
+				http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
+				return
+			}
+			if users[username] == "" {
+				http.Error(w, "{\"error\":\"User does not exist!\"}", http.StatusConflict)
+				return
+			}
+			delete(users, username)
 			account, err := json.MarshalIndent(users, "", " ")
 			if err != nil {
 				log.Println("Error serialising users.json when modifying accounts!")
