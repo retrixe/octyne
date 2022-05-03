@@ -101,8 +101,7 @@ func InitializeConnector(config *Config) *Connector {
 		GET /login
 		GET /logout
 		GET /ott (one-time ticket)
-
-		POST /config/reload
+		GET /config/reload
 
 		GET /servers
 
@@ -211,7 +210,7 @@ func (connector *Connector) registerRoutes() {
 		fmt.Fprint(w, "{\"success\":true}")
 	})
 
-	// POST /config/reload
+	// GET /config/reload
 	connector.Router.HandleFunc("/config/reload", func(w http.ResponseWriter, r *http.Request) {
 		// Check with authenticator.
 		if !connector.Validate(w, r) {
@@ -254,10 +253,13 @@ func (connector *Connector) registerRoutes() {
 				defer value.(*managedProcess).Process.ServerConfigMutex.Unlock()
 				value.(*managedProcess).Process.ServerConfig = serverConfig
 			} else {
-				if value, loaded := connector.Processes.LoadAndDelete(value); loaded { // Yes, this is safe.
+				if value, loaded := connector.Processes.LoadAndDelete(key.(string)); loaded { // Yes, this is safe.
 					value.(*managedProcess).StopProcess() // Other goroutines will cleanup.
-					for _, ws := range value.(*managedProcess).Clients {
-						close(ws) // Attempt to disconnect WebSocket clients.
+					value.(*managedProcess).ClientsLock.Lock()
+					defer value.(*managedProcess).ClientsLock.Unlock()
+					for username, ws := range value.(*managedProcess).Clients {
+						ws <- nil
+						delete(value.(*managedProcess).Clients, username)
 					}
 				}
 			}
@@ -443,6 +445,8 @@ func (connector *Connector) registerRoutes() {
 				for {
 					data, ok := <-writeToWs
 					if !ok {
+						break
+					} else if data == nil {
 						c.Close()
 						break
 					}
