@@ -6,9 +6,11 @@ Retrieve a token using the [GET /login](#get-login) endpoint and store it safely
 
 If using [the console API endpoint](#ws-serveridconsoleticketticket) or [the file download API endpoint](#get-serveridfilepathpathticketticket), you can use the one-time ticket system to make the use of these endpoints in the browser JavaScript environment convenient. Use [GET /ott (one-time ticket)](#get-ott-one-time-ticket) to retrieve a ticket using your token (same as requests to any other endpoint), then pass it in the URL query parameters. A ticket is valid for 30 seconds, tied to your account and IP address, and can only be used once.
 
-## Endpoints
+## Errors
 
 All endpoints may return an error. Errors are formatted in JSON in the following format: `{"error": "error description here"}`.
+
+## Endpoints
 
 - [GET /login](#get-login)
 - [GET /logout](#get-logout)

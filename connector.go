@@ -36,19 +36,18 @@ type Ticket struct {
 
 type processMap struct{ sync.Map }
 
-// Get gets a *processInt from a processMap by using sync.Map Load function and type-casting.
+// Get gets a *processInt from a processMap using Load function and type-casting.
 func (p *processMap) Get(name string) (*managedProcess, bool) {
-	item, err := p.Load(name)
-	if !err {
-		return nil, err
+	item, ok := p.Load(name)
+	if !ok {
+		return nil, ok
 	}
-	process, err := item.(*managedProcess)
-	return process, err
+	process, ok := item.(*managedProcess)
+	return process, ok
 }
 
 // Connector is used to create an HTTP API for external apps to talk with octyne.
 type Connector struct {
-	*Config
 	Authenticator
 	*mux.Router
 	*websocket.Upgrader
@@ -88,7 +87,6 @@ func GetIP(r *http.Request) string {
 func InitializeConnector(config *Config) *Connector {
 	// Create the connector.
 	connector := &Connector{
-		Config:        config,
 		Router:        mux.NewRouter().StrictSlash(true),
 		Processes:     processMap{},
 		Tickets:       make(map[string]Ticket),
@@ -191,6 +189,7 @@ func (connector *Connector) registerRoutes() {
 		json.NewEncoder(w).Encode(loginResponse{Token: token}) // skipcq GSC-G104
 	})
 
+	// GET /logout
 	connector.Router.HandleFunc("/logout", func(w http.ResponseWriter, r *http.Request) {
 		// In case the authorization header doesn't exist.
 		token := r.Header.Get("Authorization")
@@ -205,7 +204,7 @@ func (connector *Connector) registerRoutes() {
 			return
 		}
 		// Send the response.
-		fmt.Fprint(w, "{\"success\": true}")
+		fmt.Fprint(w, "{\"success\":true}")
 	})
 
 	// GET /servers

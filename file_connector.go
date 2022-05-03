@@ -405,7 +405,7 @@ func (connector *Connector) registerFileRoutes() {
 		if r.Method == "POST" {
 			// Check if the ZIP file exists.
 			zipPath := joinPath(directory, r.URL.Query().Get("path"))
-			if !strings.HasPrefix(zipPath, path.Clean(process.Directory)) {
+			if !strings.HasPrefix(zipPath, directory) {
 				http.Error(w, "{\"error\":\"The ZIP file is outside the server directory!\"}", http.StatusForbidden)
 				return
 			}
@@ -425,8 +425,8 @@ func (connector *Connector) registerFileRoutes() {
 				http.Error(w, "{\"error\":\"Failed to read body!\"}", http.StatusBadRequest)
 				return
 			}
-			unpackPath := joinPath(process.Directory, body.String())
-			if !strings.HasPrefix(unpackPath, path.Clean(process.Directory)) {
+			unpackPath := joinPath(directory, body.String())
+			if !strings.HasPrefix(unpackPath, directory) {
 				http.Error(w, "{\"error\":\"The ZIP file is outside the server directory!\"}", http.StatusForbidden)
 				return
 			}

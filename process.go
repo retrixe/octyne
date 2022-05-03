@@ -129,7 +129,7 @@ func (process *Process) MonitorProcess() error {
 		process.Uptime = 0
 		process.Crashes++
 		process.SendConsoleOutput("[Octyne] Server " + process.Name + " has crashed!")
-		info.Println("Process" + process.Name + " has crashed!")
+		info.Println("Server " + process.Name + " has crashed!")
 		if process.Crashes <= 3 {
 			process.SendConsoleOutput("[Octyne] Restarting server " + process.Name + " due to default behaviour.")
 			process.StartProcess()
