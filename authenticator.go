@@ -23,6 +23,8 @@ type Authenticator interface {
 	Login(username string, password string) string
 	// Logout allows logging out of a user and deleting the token from the server.
 	Logout(token string) bool
+	// Close closes the authenticator. Once closed, the authenticator should not be used.
+	Close() error
 }
 
 // RedisAuthenticator is an Authenticator implementation using Redis to store tokens.
@@ -66,6 +68,13 @@ func (a *ReplaceableAuthenticator) Logout(token string) bool {
 	return a.Engine.Logout(token)
 }
 
+// Close closes the authenticator. Once closed, the authenticator should not be used.
+func (a *ReplaceableAuthenticator) Close() error {
+	a.EngineMutex.Lock()
+	defer a.EngineMutex.Unlock()
+	return a.Engine.Close()
+}
+
 // InitializeAuthenticator initializes an authenticator wrapped with ReplaceableAuthenticator.
 func InitializeAuthenticator(config *Config) Authenticator {
 	// If Redis, create a Redis connection.
@@ -81,7 +90,7 @@ func InitializeAuthenticator(config *Config) Authenticator {
 }
 
 // InitializeRedisAuthenticator initializes an authenticator using Redis.
-func InitializeRedisAuthenticator(config *Config) Authenticator {
+func InitializeRedisAuthenticator(config *Config) *RedisAuthenticator {
 	pool := &redis.Pool{
 		Wait:      true,
 		MaxIdle:   5,
@@ -170,7 +179,7 @@ func checkValidLoginAndGenerateToken(username string, password string) string {
 	}
 	err = json.Unmarshal(contents, &users)
 	if err != nil {
-		log.Println("An error occurred while attempting to read users.json! " + err.Error())
+		log.Println("An error occurred while attempting to parse users.json! " + err.Error())
 		return ""
 	}
 	// Check whether this user exists.
@@ -235,4 +244,14 @@ func (a *RedisAuthenticator) Logout(token string) bool {
 		return false
 	}
 	return res == 1
+}
+
+// Close closes the authenticator. This is no-op for MemoryAuthenticator.
+func (a *MemoryAuthenticator) Close() error {
+	return nil
+}
+
+// Close closes the authenticator. Once closed, the authenticator should not be used.
+func (a *RedisAuthenticator) Close() error {
+	return a.Redis.Close()
 }

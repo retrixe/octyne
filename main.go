@@ -76,11 +76,9 @@ func main() {
 	} else {
 		err = http.ListenAndServeTLS(port, config.HTTPS.Cert, config.HTTPS.Key, handler)
 	}
-	redisAuthenticator, isRedisAuthenticator := connector.Authenticator.(*RedisAuthenticator)
-	if isRedisAuthenticator && redisAuthenticator.Redis != nil { // Close Redis if needed.
-		if redisErr := redisAuthenticator.Redis.Close(); redisErr != nil {
-			println(redisErr)
-		}
+	// Close the authenticator if it is a Redis authenticator.
+	if authenticatorErr := connector.Authenticator.Close(); authenticatorErr != nil {
+		log.Println("Error when closing the authenticator!", authenticatorErr)
 	}
 	log.Fatalln(err) // skipcq: GO-S0904
 }
