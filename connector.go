@@ -11,6 +11,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -92,7 +93,7 @@ func InitializeConnector(config *Config) *Connector {
 		Router:        mux.NewRouter().StrictSlash(true),
 		Processes:     processMap{},
 		Tickets:       make(map[string]Ticket),
-		Authenticator: InitializeAuthenticator(config),
+		Authenticator: &ReplaceableAuthenticator{Engine: InitializeAuthenticator(config)},
 		Upgrader:      &websocket.Upgrader{},
 	}
 	// Initialize all routes for the connector.
@@ -102,6 +103,7 @@ func InitializeConnector(config *Config) *Connector {
 		GET /logout
 		GET /ott (one-time ticket)
 
+		GET /config/reload
 		POST /accounts
 		PATCH /accounts
 		DELETE /accounts?username=username
@@ -290,6 +292,68 @@ func (connector *Connector) registerRoutes() {
 		fmt.Fprint(w, "{\"success\":true}")
 	})
 
+	// GET /config/reload
+	connector.Router.HandleFunc("/config/reload", func(w http.ResponseWriter, r *http.Request) {
+		// Check with authenticator.
+		if !connector.Validate(w, r) {
+			return
+		}
+		// Read the new config.
+		var config Config
+		file, err := os.Open("config.json")
+		if err != nil {
+			log.Println("An error occurred while attempting to read config! " + err.Error())
+			http.Error(w, "{\"error\":\"An error occurred while reading config!\"}", http.StatusInternalServerError)
+			return
+		}
+		contents, _ := ioutil.ReadAll(file)
+		err = json.Unmarshal(contents, &config)
+		if err != nil {
+			log.Println("An error occurred while attempting to parse config! " + err.Error())
+			http.Error(w, "{\"error\":\"An error occurred while parsing config!\"}", http.StatusInternalServerError)
+			return
+		}
+		// Replace authenticator if changed. We are guaranteed that Authenticator is Replaceable.
+		replaceableAuthenticator := connector.Authenticator.(*ReplaceableAuthenticator)
+		replaceableAuthenticator.EngineMutex.Lock()
+		defer replaceableAuthenticator.EngineMutex.Unlock()
+		redisAuthenticator, usingRedis := replaceableAuthenticator.Engine.(*RedisAuthenticator)
+		if usingRedis != config.Redis.Enabled ||
+			(usingRedis && redisAuthenticator.Config.Redis.URL != config.Redis.URL) {
+			replaceableAuthenticator.Engine.Close() // Bypassing ReplaceableAuthenticator mutex Lock.
+			replaceableAuthenticator.Engine = InitializeAuthenticator(&config)
+		}
+		// Add new processes.
+		for key := range config.Servers {
+			if _, ok := connector.Processes.Get(key); !ok {
+				go CreateProcess(key, config.Servers[key], connector)
+			}
+		}
+		// Modify/remove existing processes.
+		connector.Processes.Range(func(key, value interface{}) bool {
+			serverConfig, ok := config.Servers[key.(string)]
+			if ok {
+				value.(*managedProcess).Process.ServerConfigMutex.Lock()
+				defer value.(*managedProcess).Process.ServerConfigMutex.Unlock()
+				value.(*managedProcess).Process.ServerConfig = serverConfig
+			} else {
+				if value, loaded := connector.Processes.LoadAndDelete(key.(string)); loaded { // Yes, this is safe.
+					value.(*managedProcess).StopProcess() // Other goroutines will cleanup.
+					value.(*managedProcess).ClientsLock.Lock()
+					defer value.(*managedProcess).ClientsLock.Unlock()
+					for username, ws := range value.(*managedProcess).Clients {
+						ws <- nil
+						delete(value.(*managedProcess).Clients, username)
+					}
+				}
+			}
+			return true
+		})
+		// TODO: Reload HTTP server, mark server for deletion instead of instantly deleting them.
+		// Send the response.
+		fmt.Fprint(w, "{\"success\":true}")
+	})
+
 	// GET /servers
 	type serversResponse struct {
 		Servers map[string]int `json:"servers"`
@@ -466,6 +530,9 @@ func (connector *Connector) registerRoutes() {
 				for {
 					data, ok := <-writeToWs
 					if !ok {
+						break
+					} else if data == nil {
+						c.Close()
 						break
 					}
 					c.WriteMessage(websocket.TextMessage, data) // skipcq GSC-G104

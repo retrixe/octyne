@@ -75,18 +75,17 @@ func (a *ReplaceableAuthenticator) Close() error {
 	return a.Engine.Close()
 }
 
-// InitializeAuthenticator initializes an authenticator wrapped with ReplaceableAuthenticator.
+// InitializeAuthenticator initializes a Redis or Memory authenticator.
 func InitializeAuthenticator(config *Config) Authenticator {
 	// If Redis, create a Redis connection.
 	if config.Redis.Enabled {
-		return &ReplaceableAuthenticator{Engine: InitializeRedisAuthenticator(config)}
+		return InitializeRedisAuthenticator(config)
 	}
 	// Create the authenticator.
-	authenticator := &MemoryAuthenticator{
+	return &MemoryAuthenticator{
 		Config: config,
 		Tokens: make(map[string]string),
 	}
-	return &ReplaceableAuthenticator{Engine: authenticator}
 }
 
 // InitializeRedisAuthenticator initializes an authenticator using Redis.

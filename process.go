@@ -9,11 +9,13 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
 // Process defines a process running in octyne.
 type Process struct {
+	ServerConfigMutex sync.RWMutex
 	ServerConfig
 	Name    string
 	Command *exec.Cmd
@@ -50,6 +52,8 @@ func CreateProcess(name string, config ServerConfig, connector *Connector) *Proc
 func (process *Process) StartProcess() error {
 	name := process.Name
 	info.Println("Starting process (" + name + ")")
+	process.ServerConfigMutex.RLock()
+	defer process.ServerConfigMutex.RUnlock()
 	// Determine the command which should be run by Go and change the working directory.
 	cmd := strings.Split(process.ServerConfig.Command, " ")
 	command := exec.Command(cmd[0], cmd[1:]...)
