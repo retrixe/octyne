@@ -223,7 +223,7 @@ func (connector *Connector) registerRoutes() {
 			sha256sum := fmt.Sprintf("%x", sha256.Sum256([]byte(body.Password)))
 			users[body.Username] = sha256sum
 		} else if r.Method == "DELETE" {
-			var username = r.URL.Query().Get("username")
+			username := r.URL.Query().Get("username")
 			if username == "" {
 				http.Error(w, "{\"error\":\"Username not provided!\"}", http.StatusBadRequest)
 				return
@@ -233,13 +233,13 @@ func (connector *Connector) registerRoutes() {
 			}
 			delete(users, username)
 		}
-		usersJson, err := json.MarshalIndent(users, "", "  ") + "\n"
+		usersJson, err := json.MarshalIndent(users, "", "  ")
 		if err != nil {
 			log.Println("Error serialising users.json when modifying accounts!")
 			http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
 			return
 		}
-		err = ioutil.WriteFile("users.json", []byte(usersJson), 0644)
+		err = ioutil.WriteFile("users.json", []byte(string(usersJson)+"\n"), 0644)
 		if err != nil {
 			log.Println("Error writing to users.json when modifying accounts!")
 			http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
