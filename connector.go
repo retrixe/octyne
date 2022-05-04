@@ -172,7 +172,109 @@ func (connector *Connector) AddProcess(proc *Process) {
 func (connector *Connector) registerRoutes() {
 	// GET /
 	connector.Router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, "Hi, octyne is online and listening to this port successfully!")
+		fmt.Fprintln(w, "Hi, octyne is online and listening to this port successfully!")
+	})
+
+	// GET /login
+	type loginResponse struct {
+		Token string `json:"token"`
+	}
+	connector.Router.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
+		// In case the username and password headers don't exist.
+		username := r.Header.Get("Username")
+		password := r.Header.Get("Password")
+		if username == "" || password == "" {
+			http.Error(w, "{\"error\":\"Username or password not provided!\"}", http.StatusBadRequest)
+			return
+		}
+		// Authorize the user.
+		token := connector.Login(username, password)
+		if token == "" {
+			http.Error(w, "{\"error\":\"Invalid username or password!\"}", http.StatusUnauthorized)
+			return
+		}
+		// Send the response.
+		json.NewEncoder(w).Encode(loginResponse{Token: token}) // skipcq GSC-G104
+	})
+
+	// GET /logout
+	connector.Router.HandleFunc("/logout", func(w http.ResponseWriter, r *http.Request) {
+		// In case the authorization header doesn't exist.
+		token := r.Header.Get("Authorization")
+		if token == "" {
+			http.Error(w, "{\"error\":\"Token not provided!\"}", http.StatusBadRequest)
+			return
+		}
+		// Authorize the user.
+		success := connector.Logout(token)
+		if !success {
+			http.Error(w, "{\"error\":\"Invalid token, failed to logout!\"}", http.StatusUnauthorized)
+			return
+		}
+		// Send the response.
+		fmt.Fprintln(w, "{\"success\":true}")
+	})
+
+	// GET /config/reload
+	connector.Router.HandleFunc("/config/reload", func(w http.ResponseWriter, r *http.Request) {
+		// Check with authenticator.
+		if !connector.Validate(w, r) {
+			return
+		}
+		// Read the new config.
+		var config Config
+		file, err := os.Open("config.json")
+		if err != nil {
+			log.Println("An error occurred while attempting to read config! " + err.Error())
+			http.Error(w, "{\"error\":\"An error occurred while reading config!\"}", http.StatusInternalServerError)
+			return
+		}
+		contents, _ := ioutil.ReadAll(file)
+		err = json.Unmarshal(contents, &config)
+		if err != nil {
+			log.Println("An error occurred while attempting to parse config! " + err.Error())
+			http.Error(w, "{\"error\":\"An error occurred while parsing config!\"}", http.StatusInternalServerError)
+			return
+		}
+		// Replace authenticator if changed. We are guaranteed that Authenticator is Replaceable.
+		replaceableAuthenticator := connector.Authenticator.(*ReplaceableAuthenticator)
+		replaceableAuthenticator.EngineMutex.Lock()
+		defer replaceableAuthenticator.EngineMutex.Unlock()
+		redisAuthenticator, usingRedis := replaceableAuthenticator.Engine.(*RedisAuthenticator)
+		if usingRedis != config.Redis.Enabled ||
+			(usingRedis && redisAuthenticator.Config.Redis.URL != config.Redis.URL) {
+			replaceableAuthenticator.Engine.Close() // Bypassing ReplaceableAuthenticator mutex Lock.
+			replaceableAuthenticator.Engine = InitializeAuthenticator(&config)
+		}
+		// Add new processes.
+		for key := range config.Servers {
+			if _, ok := connector.Processes.Get(key); !ok {
+				go CreateProcess(key, config.Servers[key], connector)
+			}
+		}
+		// Modify/remove existing processes.
+		connector.Processes.Range(func(key, value interface{}) bool {
+			serverConfig, ok := config.Servers[key.(string)]
+			if ok {
+				value.(*managedProcess).Process.ServerConfigMutex.Lock()
+				defer value.(*managedProcess).Process.ServerConfigMutex.Unlock()
+				value.(*managedProcess).Process.ServerConfig = serverConfig
+			} else {
+				if value, loaded := connector.Processes.LoadAndDelete(key.(string)); loaded { // Yes, this is safe.
+					value.(*managedProcess).StopProcess() // Other goroutines will cleanup.
+					value.(*managedProcess).ClientsLock.Lock()
+					defer value.(*managedProcess).ClientsLock.Unlock()
+					for username, ws := range value.(*managedProcess).Clients {
+						ws <- nil
+						delete(value.(*managedProcess).Clients, username)
+					}
+				}
+			}
+			return true
+		})
+		// TODO: Reload HTTP server, mark server for deletion instead of instantly deleting them.
+		// Send the response.
+		fmt.Fprintln(w, "{\"success\":true}")
 	})
 
 	// POST /accounts
@@ -249,109 +351,7 @@ func (connector *Connector) registerRoutes() {
 			http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
 			return
 		}
-		fmt.Fprint(w, "{\"success\":true}")
-	})
-
-	// GET /login
-	type loginResponse struct {
-		Token string `json:"token"`
-	}
-	connector.Router.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
-		// In case the username and password headers don't exist.
-		username := r.Header.Get("Username")
-		password := r.Header.Get("Password")
-		if username == "" || password == "" {
-			http.Error(w, "{\"error\":\"Username or password not provided!\"}", http.StatusBadRequest)
-			return
-		}
-		// Authorize the user.
-		token := connector.Login(username, password)
-		if token == "" {
-			http.Error(w, "{\"error\":\"Invalid username or password!\"}", http.StatusUnauthorized)
-			return
-		}
-		// Send the response.
-		json.NewEncoder(w).Encode(loginResponse{Token: token}) // skipcq GSC-G104
-	})
-
-	// GET /logout
-	connector.Router.HandleFunc("/logout", func(w http.ResponseWriter, r *http.Request) {
-		// In case the authorization header doesn't exist.
-		token := r.Header.Get("Authorization")
-		if token == "" {
-			http.Error(w, "{\"error\":\"Token not provided!\"}", http.StatusBadRequest)
-			return
-		}
-		// Authorize the user.
-		success := connector.Logout(token)
-		if !success {
-			http.Error(w, "{\"error\":\"Invalid token, failed to logout!\"}", http.StatusUnauthorized)
-			return
-		}
-		// Send the response.
-		fmt.Fprint(w, "{\"success\":true}")
-	})
-
-	// GET /config/reload
-	connector.Router.HandleFunc("/config/reload", func(w http.ResponseWriter, r *http.Request) {
-		// Check with authenticator.
-		if !connector.Validate(w, r) {
-			return
-		}
-		// Read the new config.
-		var config Config
-		file, err := os.Open("config.json")
-		if err != nil {
-			log.Println("An error occurred while attempting to read config! " + err.Error())
-			http.Error(w, "{\"error\":\"An error occurred while reading config!\"}", http.StatusInternalServerError)
-			return
-		}
-		contents, _ := ioutil.ReadAll(file)
-		err = json.Unmarshal(contents, &config)
-		if err != nil {
-			log.Println("An error occurred while attempting to parse config! " + err.Error())
-			http.Error(w, "{\"error\":\"An error occurred while parsing config!\"}", http.StatusInternalServerError)
-			return
-		}
-		// Replace authenticator if changed. We are guaranteed that Authenticator is Replaceable.
-		replaceableAuthenticator := connector.Authenticator.(*ReplaceableAuthenticator)
-		replaceableAuthenticator.EngineMutex.Lock()
-		defer replaceableAuthenticator.EngineMutex.Unlock()
-		redisAuthenticator, usingRedis := replaceableAuthenticator.Engine.(*RedisAuthenticator)
-		if usingRedis != config.Redis.Enabled ||
-			(usingRedis && redisAuthenticator.Config.Redis.URL != config.Redis.URL) {
-			replaceableAuthenticator.Engine.Close() // Bypassing ReplaceableAuthenticator mutex Lock.
-			replaceableAuthenticator.Engine = InitializeAuthenticator(&config)
-		}
-		// Add new processes.
-		for key := range config.Servers {
-			if _, ok := connector.Processes.Get(key); !ok {
-				go CreateProcess(key, config.Servers[key], connector)
-			}
-		}
-		// Modify/remove existing processes.
-		connector.Processes.Range(func(key, value interface{}) bool {
-			serverConfig, ok := config.Servers[key.(string)]
-			if ok {
-				value.(*managedProcess).Process.ServerConfigMutex.Lock()
-				defer value.(*managedProcess).Process.ServerConfigMutex.Unlock()
-				value.(*managedProcess).Process.ServerConfig = serverConfig
-			} else {
-				if value, loaded := connector.Processes.LoadAndDelete(key.(string)); loaded { // Yes, this is safe.
-					value.(*managedProcess).StopProcess() // Other goroutines will cleanup.
-					value.(*managedProcess).ClientsLock.Lock()
-					defer value.(*managedProcess).ClientsLock.Unlock()
-					for username, ws := range value.(*managedProcess).Clients {
-						ws <- nil
-						delete(value.(*managedProcess).Clients, username)
-					}
-				}
-			}
-			return true
-		})
-		// TODO: Reload HTTP server, mark server for deletion instead of instantly deleting them.
-		// Send the response.
-		fmt.Fprint(w, "{\"success\":true}")
+		fmt.Fprintln(w, "{\"success\":true}")
 	})
 
 	// GET /servers
@@ -398,7 +398,7 @@ func (connector *Connector) registerRoutes() {
 			connector.DeleteTicket(ticketString)
 		})()
 		// Send the response.
-		fmt.Fprint(w, "{\"ticket\": \""+ticketString+"\"}")
+		fmt.Fprintln(w, "{\"ticket\": \""+ticketString+"\"}")
 	})
 
 	// GET /server/{id}

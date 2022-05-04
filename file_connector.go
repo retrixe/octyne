@@ -164,7 +164,7 @@ func (connector *Connector) registerFileRoutes() {
 				http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
 				return
 			}
-			fmt.Fprint(w, "{\"success\":true}")
+			fmt.Fprintln(w, "{\"success\":true}")
 		} else if r.Method == "POST" {
 			// Parse our multipart form, 5120 << 20 specifies a maximum upload of a 5 GB file.
 			err := r.ParseMultipartForm(5120 << 20)
@@ -194,7 +194,7 @@ func (connector *Connector) registerFileRoutes() {
 			defer toWrite.Close()
 			// write this byte array to our file
 			io.Copy(toWrite, file)
-			fmt.Fprintf(w, "{\"success\":true}")
+			fmt.Fprintln(w, "{\"success\":true}")
 		} else if r.Method == "PATCH" {
 			// Get the request body to check the operation.
 			var body bytes.Buffer
@@ -251,7 +251,7 @@ func (connector *Connector) registerFileRoutes() {
 						http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
 						return
 					}
-					fmt.Fprintf(w, "{\"success\":true}")
+					fmt.Fprintln(w, "{\"success\":true}")
 				} else {
 					err := system.Copy(stat, oldpath, newpath)
 					if err != nil {
@@ -259,7 +259,7 @@ func (connector *Connector) registerFileRoutes() {
 						http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
 						return
 					}
-					fmt.Fprintf(w, "{\"success\":true}")
+					fmt.Fprintln(w, "{\"success\":true}")
 				}
 			} else {
 				http.Error(w, "{\"error\":\"Invalid operation! Operations available: mv,cp\"}", http.StatusMethodNotAllowed)
@@ -305,7 +305,7 @@ func (connector *Connector) registerFileRoutes() {
 				http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
 				return
 			}
-			fmt.Fprintf(w, "{\"success\":true}")
+			fmt.Fprintln(w, "{\"success\":true}")
 		} else {
 			http.Error(w, "{\"error\":\"Only POST is allowed!\"}", http.StatusMethodNotAllowed)
 		}
@@ -389,7 +389,7 @@ func (connector *Connector) registerFileRoutes() {
 					return
 				}
 			}
-			fmt.Fprintf(w, "{\"success\":true}")
+			fmt.Fprintln(w, "{\"success\":true}")
 		} else {
 			http.Error(w, "{\"error\":\"Only POST is allowed!\"}", http.StatusMethodNotAllowed)
 		}
@@ -462,7 +462,7 @@ func (connector *Connector) registerFileRoutes() {
 				http.Error(w, "{\"error\":\"An error occurred while unzipping!\"}", http.StatusInternalServerError)
 				return
 			}
-			fmt.Fprintf(w, "{\"success\":true}")
+			fmt.Fprintln(w, "{\"success\":true}")
 		} else {
 			http.Error(w, "{\"error\":\"Only POST is allowed!\"}", http.StatusMethodNotAllowed)
 		}

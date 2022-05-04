@@ -76,7 +76,7 @@ func main() {
 	} else {
 		err = http.ListenAndServeTLS(port, config.HTTPS.Cert, config.HTTPS.Key, handler)
 	}
-	// Close the authenticator if it is a Redis authenticator.
+	// Close the authenticator.
 	if authenticatorErr := connector.Authenticator.Close(); authenticatorErr != nil {
 		log.Println("Error when closing the authenticator!", authenticatorErr)
 	}
