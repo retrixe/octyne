@@ -92,7 +92,7 @@ func InitializeConnector(config *Config) *Connector {
 		Router:        mux.NewRouter().StrictSlash(true),
 		Processes:     processMap{},
 		Tickets:       make(map[string]Ticket),
-		Authenticator: InitializeAuthenticator(config),
+		Authenticator: &ReplaceableAuthenticator{Engine: InitializeAuthenticator(config)},
 		Upgrader:      &websocket.Upgrader{},
 	}
 	// Initialize all routes for the connector.
@@ -237,7 +237,8 @@ func (connector *Connector) registerRoutes() {
 		defer replaceableAuthenticator.EngineMutex.Unlock()
 		redisAuth, usingRedis := replaceableAuthenticator.Engine.(*RedisAuthenticator)
 		if usingRedis != config.Redis.Enabled || (usingRedis && redisAuth.Config.Redis.URL != config.Redis.URL) {
-			replaceableAuthenticator.Engine = InitializeAuthenticator(&config).(*ReplaceableAuthenticator).Engine
+			replaceableAuthenticator.Engine.Close() // Bypassing ReplaceableAuthenticator mutex Lock.
+			replaceableAuthenticator.Engine = InitializeAuthenticator(&config)
 		}
 		// Add new processes.
 		for key := range config.Servers {
