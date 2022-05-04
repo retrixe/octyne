@@ -104,6 +104,10 @@ func InitializeConnector(config *Config) *Connector {
 		GET /logout
 		GET /ott (one-time ticket)
 
+		POST /accounts
+		PATCH /accounts
+		DELETE /accounts?username=username
+
 		GET /servers
 
 		GET /server/{id} (statistics like uptime, CPU and RAM)
@@ -173,7 +177,7 @@ func (connector *Connector) registerRoutes() {
 
 	// POST /accounts
 	// PATCH /accounts
-	// DELETE /accounts
+	// DELETE /accounts?username=username
 	type accountsRequestBody struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
