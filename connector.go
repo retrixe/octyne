@@ -101,6 +101,7 @@ func InitializeConnector(config *Config) *Connector {
 		GET /login
 		GET /logout
 		GET /ott (one-time ticket)
+
 		GET /config/reload
 
 		GET /servers
@@ -235,8 +236,9 @@ func (connector *Connector) registerRoutes() {
 		replaceableAuthenticator := connector.Authenticator.(*ReplaceableAuthenticator)
 		replaceableAuthenticator.EngineMutex.Lock()
 		defer replaceableAuthenticator.EngineMutex.Unlock()
-		redisAuth, usingRedis := replaceableAuthenticator.Engine.(*RedisAuthenticator)
-		if usingRedis != config.Redis.Enabled || (usingRedis && redisAuth.Config.Redis.URL != config.Redis.URL) {
+		redisAuthenticator, usingRedis := replaceableAuthenticator.Engine.(*RedisAuthenticator)
+		if usingRedis != config.Redis.Enabled ||
+			(usingRedis && redisAuthenticator.Config.Redis.URL != config.Redis.URL) {
 			replaceableAuthenticator.Engine.Close() // Bypassing ReplaceableAuthenticator mutex Lock.
 			replaceableAuthenticator.Engine = InitializeAuthenticator(&config)
 		}
@@ -266,6 +268,7 @@ func (connector *Connector) registerRoutes() {
 			}
 			return true
 		})
+		// TODO: Reload HTTP server, mark server for deletion instead of instantly deleting them.
 		// Send the response.
 		fmt.Fprint(w, "{\"success\":true}")
 	})
