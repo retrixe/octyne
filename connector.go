@@ -4,9 +4,11 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"strings"
@@ -100,6 +102,10 @@ func InitializeConnector(config *Config) *Connector {
 		GET /logout
 		GET /ott (one-time ticket)
 
+		POST /accounts
+		PATCH /accounts
+		DELETE /accounts?username=username
+
 		GET /servers
 
 		GET /server/{id} (statistics like uptime, CPU and RAM)
@@ -165,6 +171,83 @@ func (connector *Connector) registerRoutes() {
 	// GET /
 	connector.Router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, "Hi, octyne is online and listening to this port successfully!")
+	})
+
+	// POST /accounts
+	// PATCH /accounts
+	// DELETE /accounts?username=username
+	type accountsRequestBody struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	connector.Router.HandleFunc("/accounts", func(w http.ResponseWriter, r *http.Request) {
+		if !connector.Validate(w, r) {
+			return
+		} else if r.Method != "POST" && r.Method != "PATCH" && r.Method != "DELETE" {
+			http.Error(w, "{\"error\":\"Only POST, PATCH and DELETE are allowed!\"}", http.StatusMethodNotAllowed)
+			return
+		}
+		var users map[string]string
+		contents, err := ioutil.ReadFile("users.json")
+		if err != nil {
+			log.Println("Error reading users.json when modifying accounts!", err)
+			http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
+			return
+		}
+		err = json.Unmarshal(contents, &users)
+		if err != nil {
+			log.Println("Error parsing users.json when modifying accounts!", err)
+			http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
+			return
+		}
+		if r.Method == "POST" || r.Method == "PATCH" {
+			var buffer bytes.Buffer
+			_, err := buffer.ReadFrom(r.Body)
+			if err != nil {
+				http.Error(w, "{\"error\":\"Failed to read body!\"}", http.StatusBadRequest)
+				return
+			}
+			var body accountsRequestBody
+			err = json.Unmarshal(buffer.Bytes(), &body)
+			if err != nil {
+				http.Error(w, "{\"error\":\"Invalid JSON body!\"}", http.StatusBadRequest)
+				return
+			} else if body.Username == "" || body.Password == "" {
+				http.Error(w, "{\"error\":\"Username or password not provided!\"}", http.StatusBadRequest)
+				return
+			} else if r.Method == "POST" && users[body.Username] != "" {
+				http.Error(w, "{\"error\":\"User already exists!\"}", http.StatusConflict)
+				return
+			} else if r.Method == "PATCH" && users[body.Username] == "" {
+				http.Error(w, "{\"error\":\"User does not exist!\"}", http.StatusNotFound)
+				return
+			}
+			sha256sum := fmt.Sprintf("%x", sha256.Sum256([]byte(body.Password)))
+			users[body.Username] = sha256sum
+		} else if r.Method == "DELETE" {
+			username := r.URL.Query().Get("username")
+			if username == "" {
+				http.Error(w, "{\"error\":\"Username not provided!\"}", http.StatusBadRequest)
+				return
+			} else if users[username] == "" {
+				http.Error(w, "{\"error\":\"User does not exist!\"}", http.StatusNotFound)
+				return
+			}
+			delete(users, username)
+		}
+		usersJson, err := json.MarshalIndent(users, "", "  ")
+		if err != nil {
+			log.Println("Error serialising users.json when modifying accounts!")
+			http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
+			return
+		}
+		err = ioutil.WriteFile("users.json", []byte(string(usersJson)+"\n"), 0644)
+		if err != nil {
+			log.Println("Error writing to users.json when modifying accounts!")
+			http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
+			return
+		}
+		fmt.Fprint(w, "{\"success\":true}")
 	})
 
 	// GET /login
