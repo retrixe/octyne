@@ -226,8 +226,9 @@ func (a *MemoryAuthenticator) Logout(token string) bool {
 	}
 	a.TokenMutex.Lock()
 	defer a.TokenMutex.Unlock()
+	tokenExisted := a.Tokens[token] != ""
 	delete(a.Tokens, token)
-	return false
+	return tokenExisted
 }
 
 // Logout allows logging out of a user and deleting the token from the server.

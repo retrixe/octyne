@@ -273,6 +273,7 @@ func (connector *Connector) registerRoutes() {
 		// TODO: Reload HTTP server, mark server for deletion instead of instantly deleting them.
 		// Send the response.
 		fmt.Fprintln(w, "{\"success\":true}")
+		info.Println("Config reloaded successfully!")
 	})
 
 	// POST /accounts
@@ -459,7 +460,10 @@ func (connector *Connector) registerRoutes() {
 		} else if r.Method == "GET" {
 			// Get the PID of the process.
 			var stat system.ProcessStats
-			if process.Command != nil && process.Command.Process != nil && process.Command.Process.Pid > 0 {
+			if process.Command != nil &&
+				process.Command.Process != nil &&
+				process.Command.ProcessState == nil &&
+				process.Online == 1 {
 				// Get CPU usage and memory usage of the process.
 				var err error
 				stat, err = system.GetProcessStats(process.Command.Process.Pid)
