@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/gorilla/handlers"
 )
@@ -69,10 +70,15 @@ func main() {
 		handlers.AllowedMethods([]string{"GET", "POST", "PUT", "HEAD", "OPTIONS", "PATCH", "DELETE"}),
 		handlers.AllowedOrigins([]string{"*"}),
 	)(connector.Router)
+	server := &http.Server{
+		Addr:              port,
+		Handler:           handler,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
 	if !config.HTTPS.Enabled {
-		err = http.ListenAndServe(port, handler)
+		err = server.ListenAndServe()
 	} else {
-		err = http.ListenAndServeTLS(port, config.HTTPS.Cert, config.HTTPS.Key, handler)
+		err = server.ListenAndServeTLS(config.HTTPS.Cert, config.HTTPS.Key)
 	}
 	// Close the authenticator.
 	if authenticatorErr := connector.Authenticator.Close(); authenticatorErr != nil {

@@ -12,7 +12,7 @@ import (
 func Copy(fromMode fs.FileMode, path string, dest string) error {
 	switch fromMode & os.ModeType {
 	case os.ModeDir:
-		if err := os.MkdirAll(dest, 0755); err != nil {
+		if err := os.MkdirAll(dest, 0777); err != nil {
 			return err
 		}
 		return CopyDirectory(path, dest)

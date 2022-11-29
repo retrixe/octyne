@@ -48,7 +48,7 @@ func UnzipFile(zipFile string, location string) error {
 			return err
 		}
 		// Copy file from zip to disk.
-		_, err = io.Copy(outFile, rc)
+		_, err = io.Copy(outFile, rc) // skipcq: GO-S2110
 		if err != nil {
 			return err
 		}

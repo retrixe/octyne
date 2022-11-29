@@ -105,7 +105,7 @@ func (process *Process) SendCommand(command string) {
 
 // SendConsoleOutput sends console output to the stdout of the process.
 func (process *Process) SendConsoleOutput(command string) {
-	go fmt.Fprintln(process.Input, command)
+	go fmt.Fprintln(process.Input, command) // skipcq: GO-E1007
 }
 
 // MonitorProcess monitors the process and automatically marks it as offline/online.

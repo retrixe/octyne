@@ -247,7 +247,7 @@ func (a *RedisAuthenticator) Logout(token string) bool {
 }
 
 // Close closes the authenticator. This is no-op for MemoryAuthenticator.
-func (a *MemoryAuthenticator) Close() error {
+func (*MemoryAuthenticator) Close() error {
 	return nil
 }
 
