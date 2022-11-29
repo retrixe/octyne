@@ -6,9 +6,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -171,7 +171,7 @@ func checkValidLoginAndGenerateToken(username string, password string) string {
 	sha256sum := fmt.Sprintf("%x", sha256.Sum256([]byte(password)))
 	// Read users.json and check whether a user with such a username and password exists.
 	var users map[string]string
-	contents, err := ioutil.ReadFile("users.json")
+	contents, err := os.ReadFile("users.json")
 	if err != nil {
 		log.Println("An error occurred while attempting to read users.json! " + err.Error())
 		return ""

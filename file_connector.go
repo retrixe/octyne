@@ -253,7 +253,7 @@ func (connector *Connector) registerFileRoutes() {
 					}
 					fmt.Fprintln(w, "{\"success\":true}")
 				} else {
-					err := system.Copy(stat, oldpath, newpath)
+					err := system.Copy(stat.Mode(), oldpath, newpath)
 					if err != nil {
 						log.Println("An error occurred when copying "+oldpath+" to "+newpath, "("+process.Name+")", err)
 						http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)

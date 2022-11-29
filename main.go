@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -34,11 +33,10 @@ func main() {
 
 	// Read config.
 	var config Config
-	file, err := os.Open("config.json")
+	contents, err := os.ReadFile("config.json")
 	if err != nil {
 		panic("An error occurred while attempting to read config! " + err.Error())
 	}
-	contents, _ := ioutil.ReadAll(file)
 	err = json.Unmarshal(contents, &config)
 	if err != nil {
 		panic("An error occurred while attempting to read config! " + err.Error())

@@ -3,14 +3,14 @@ package system
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
+	"io/fs"
 	"os"
 	"path/filepath"
 )
 
 // Copy copies a file, symlink or folder from one place to another.
-func Copy(fromStat os.FileInfo, path string, dest string) error {
-	switch fromStat.Mode() & os.ModeType {
+func Copy(fromMode fs.FileMode, path string, dest string) error {
+	switch fromMode & os.ModeType {
 	case os.ModeDir:
 		if err := os.MkdirAll(dest, 0755); err != nil {
 			return err
@@ -26,7 +26,7 @@ func Copy(fromStat os.FileInfo, path string, dest string) error {
 // CopyDirectory copies a folder from one place to another.
 // Requires the destination path to exist already.
 func CopyDirectory(path string, dest string) error {
-	entries, err := ioutil.ReadDir(path)
+	entries, err := os.ReadDir(path)
 	if err != nil {
 		return err
 	}
@@ -37,15 +37,19 @@ func CopyDirectory(path string, dest string) error {
 		/* Not Windows compatible: stat, ok := entry.Sys().(*syscall.Stat_t)
 		if !ok {return fmt.Errorf("failed to get raw syscall.Stat_t data for '%s'", sourcePath)} */
 
-		if err := Copy(entry, sourcePath, destPath); err != nil {
+		if err := Copy(entry.Type(), sourcePath, destPath); err != nil {
 			return err
 		}
 
 		// if err := os.Lchown(destPath, int(stat.Uid), int(stat.Gid)); err != nil {return err}
 
-		isSymlink := entry.Mode()&os.ModeSymlink != 0
+		isSymlink := entry.Type()&os.ModeSymlink != 0
 		if !isSymlink {
-			if err := os.Chmod(destPath, entry.Mode()); err != nil {
+			if stat, err := entry.Info(); err == nil {
+				if err := os.Chmod(destPath, stat.Mode()); err != nil {
+					return err
+				}
+			} else {
 				return err
 			}
 		}

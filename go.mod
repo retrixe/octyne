@@ -1,6 +1,6 @@
 module github.com/retrixe/octyne
 
-go 1.14
+go 1.18
 
 require (
 	github.com/gomodule/redigo v2.0.0+incompatible

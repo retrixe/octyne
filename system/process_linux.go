@@ -1,11 +1,12 @@
+//go:build linux
 // +build linux
 
 package system
 
 import (
 	"errors"
-	"io/ioutil"
 	"math"
+	"os"
 	"os/exec"
 	"path"
 	"strconv"
@@ -54,7 +55,7 @@ func GetProcessStats(pid int) (ProcessStats, error) {
 	var clkTck float64 = 100
 	var pageSize float64 = 4096
 
-	uptimeFileBytes, _ := ioutil.ReadFile(path.Join("/proc", "uptime"))
+	uptimeFileBytes, _ := os.ReadFile(path.Join("/proc", "uptime"))
 	uptime := parseFloat(strings.Split(string(uptimeFileBytes), " ")[0])
 
 	clkTckStdout, err := exec.Command("getconf", "CLK_TCK").Output()
@@ -67,7 +68,7 @@ func GetProcessStats(pid int) (ProcessStats, error) {
 		pageSize = parseFloat(formatStdOut(pageSizeStdout, 0)[0])
 	}
 
-	procStatFileBytes, _ := ioutil.ReadFile(path.Join("/proc", strconv.Itoa(pid), "stat"))
+	procStatFileBytes, _ := os.ReadFile(path.Join("/proc", strconv.Itoa(pid), "stat"))
 	splitAfter := strings.SplitAfter(string(procStatFileBytes), ")")
 
 	if len(splitAfter) == 0 || len(splitAfter) == 1 {

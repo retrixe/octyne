@@ -8,7 +8,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -223,13 +222,12 @@ func (connector *Connector) registerRoutes() {
 		}
 		// Read the new config.
 		var config Config
-		file, err := os.Open("config.json")
+		contents, err := os.ReadFile("config.json")
 		if err != nil {
 			log.Println("An error occurred while attempting to read config! " + err.Error())
 			http.Error(w, "{\"error\":\"An error occurred while reading config!\"}", http.StatusInternalServerError)
 			return
 		}
-		contents, _ := ioutil.ReadAll(file)
 		err = json.Unmarshal(contents, &config)
 		if err != nil {
 			log.Println("An error occurred while attempting to parse config! " + err.Error())
@@ -292,7 +290,7 @@ func (connector *Connector) registerRoutes() {
 			return
 		}
 		var users map[string]string
-		contents, err := ioutil.ReadFile("users.json")
+		contents, err := os.ReadFile("users.json")
 		if err != nil {
 			log.Println("Error reading users.json when modifying accounts!", err)
 			http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
@@ -345,7 +343,7 @@ func (connector *Connector) registerRoutes() {
 			http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
 			return
 		}
-		err = ioutil.WriteFile("users.json", []byte(string(usersJson)+"\n"), 0644)
+		err = os.WriteFile("users.json", []byte(string(usersJson)+"\n"), 0644)
 		if err != nil {
 			log.Println("Error writing to users.json when modifying accounts!")
 			http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
