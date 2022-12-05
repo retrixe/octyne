@@ -8,6 +8,19 @@ It incorporates the ability to manage files and access the terminal output and i
 
 [retrixe/ecthelion](https://github.com/retrixe/ecthelion) complements octyne by providing a web interface to control apps on octyne remotely.
 
+## Quick Start
+
+- [Download the latest version of Octyne from GitHub Releases for your OS and CPU architecture here.](https://github.com/retrixe/octyne/releases/latest) Alternatively, you can get the latest bleeding edge version of Octyne from GitHub Actions [here](https://github.com/retrixe/octyne/actions?query=branch%3Amain), or by compiling it yourself.
+- Place octyne in a folder, and run `chmod +x <octyne file name>` to mark it as executable if using macOS/Linux/*nix-like.
+- Follow the steps [here](https://github.com/retrixe/octyne#configuration) to configure Octyne correctly.
+- Run `./<octyne file name>` (`.\<octyne file name>.exe` on Windows) to start Octyne. Alternatively, on Windows/Linux desktops, you can double click the file (on Linux, select `Run in Terminal`, else it will run in the background).
+
+### Usage
+
+To get the current Octyne version, you can run `./octyne --version` or `./octyne -v`. This does not account for development builds.
+
+[You might want to manage octyne using systemd on Linux systems, which can start and stop Octyne, start it on boot, store its logs and restart it on crash. This article should help you out.](https://medium.com/@benmorel/creating-a-linux-service-with-systemd-611b5c8b91d6)
+
 ## Configuration
 
 Octyne depends on two files in the same directory to get configuration from. Note that Octyne refers to apps as "servers" in the config and API for legacy reasons (due to originally being targeted towards web servers and Minecraft servers).
