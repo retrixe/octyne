@@ -171,7 +171,7 @@ func (connector *Connector) AddProcess(proc *Process) {
 func (connector *Connector) registerRoutes() {
 	// GET /
 	connector.Router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintln(w, "Hi, octyne is online and listening to this port successfully!")
+		fmt.Fprintln(w, "{\"version\": \""+OctyneVersion+"\"}")
 	})
 
 	// GET /login
