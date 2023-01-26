@@ -17,6 +17,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
+	"github.com/retrixe/octyne/auth"
 	"github.com/retrixe/octyne/system"
 )
 
@@ -50,7 +51,7 @@ func (p *processMap) Get(name string) (*managedProcess, bool) {
 
 // Connector is used to create an HTTP API for external apps to talk with octyne.
 type Connector struct {
-	Authenticator
+	auth.Authenticator
 	*mux.Router
 	*websocket.Upgrader
 	Processes   processMap
@@ -87,12 +88,19 @@ func GetIP(r *http.Request) string {
 
 // InitializeConnector initializes a connector to create an HTTP API for interaction.
 func InitializeConnector(config *Config) *Connector {
+	// Create an authenticator.
+	var authenticator auth.Authenticator
+	if config.Redis.Enabled {
+		authenticator = auth.NewRedisAuthenticator(config.Redis.URL)
+	} else {
+		authenticator = auth.NewMemoryAuthenticator()
+	}
 	// Create the connector.
 	connector := &Connector{
 		Router:        mux.NewRouter().StrictSlash(true),
 		Processes:     processMap{},
 		Tickets:       make(map[string]Ticket),
-		Authenticator: &ReplaceableAuthenticator{Engine: InitializeAuthenticator(config)},
+		Authenticator: &auth.ReplaceableAuthenticator{Engine: authenticator},
 		Upgrader:      &websocket.Upgrader{},
 	}
 	// Initialize all routes for the connector.
@@ -235,14 +243,18 @@ func (connector *Connector) registerRoutes() {
 			return
 		}
 		// Replace authenticator if changed. We are guaranteed that Authenticator is Replaceable.
-		replaceableAuthenticator := connector.Authenticator.(*ReplaceableAuthenticator)
+		replaceableAuthenticator := connector.Authenticator.(*auth.ReplaceableAuthenticator)
 		replaceableAuthenticator.EngineMutex.Lock()
 		defer replaceableAuthenticator.EngineMutex.Unlock()
-		redisAuthenticator, usingRedis := replaceableAuthenticator.Engine.(*RedisAuthenticator)
+		redisAuthenticator, usingRedis := replaceableAuthenticator.Engine.(*auth.RedisAuthenticator)
 		if usingRedis != config.Redis.Enabled ||
-			(usingRedis && redisAuthenticator.Config.Redis.URL != config.Redis.URL) {
+			(usingRedis && redisAuthenticator.URL != config.Redis.URL) {
 			replaceableAuthenticator.Engine.Close() // Bypassing ReplaceableAuthenticator mutex Lock.
-			replaceableAuthenticator.Engine = InitializeAuthenticator(&config)
+			if config.Redis.Enabled {
+				replaceableAuthenticator.Engine = auth.NewRedisAuthenticator(config.Redis.URL)
+			} else {
+				replaceableAuthenticator.Engine = auth.NewMemoryAuthenticator()
+			}
 		}
 		// Add new processes.
 		for key := range config.Servers {
