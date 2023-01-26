@@ -4,22 +4,23 @@ A process manager with an HTTP API for remote console and file access.
 
 Octyne allows running multiple apps on a remote server and providing an HTTP API to manage them. This allows for hosting web servers, game servers, bots and so on on remote servers without having to mess with SSH, using `screen` and `systemd` whenever you want to make any change, in a highly manageable and secure way.
 
-It incorporates the ability to manage files and access the terminal output and input over HTTP remotely. For further security, it is recommended to use HTTPS (see [config.json](#config.json)) to ensure end-to-end secure transmission.
+It incorporates the ability to manage files and access the terminal output and input over HTTP remotely. For further security, it is recommended to use HTTPS (see [config.json](#configjson)) to ensure end-to-end secure transmission.
 
 [retrixe/ecthelion](https://github.com/retrixe/ecthelion) complements octyne by providing a web interface to control apps on octyne remotely.
 
 ## Quick Start
 
-- [Download the latest version of Octyne from GitHub Releases for your OS and CPU architecture here.](https://github.com/retrixe/octyne/releases/latest) Alternatively, you can get the latest bleeding edge version of Octyne from GitHub Actions [here](https://github.com/retrixe/octyne/actions?query=branch%3Amain), or by compiling it yourself.
+- [Download the latest version of Octyne from GitHub Releases for your OS and CPU.](https://github.com/retrixe/octyne/releases/latest) Alternatively, you can get the latest bleeding edge version of Octyne from [GitHub Actions](https://github.com/retrixe/octyne/actions?query=branch%3Amain), or by compiling it yourself.
 - Place octyne in a folder, and run `chmod +x <octyne file name>` to mark it as executable if using macOS/Linux/*nix-like.
 - Follow the steps [here](https://github.com/retrixe/octyne#configuration) to configure Octyne correctly.
-- Run `./<octyne file name>` (`.\<octyne file name>.exe` on Windows) to start Octyne. Alternatively, on Windows/Linux desktops, you can double click the file (on Linux, select `Run in Terminal`, else it will run in the background).
+- Run `./<octyne file name>` (`.\<octyne file name>.exe` on Windows) in a terminal in the folder to start Octyne. Alternatively, on Windows/Linux desktops, you can double click the file (on Linux, select `Run in Terminal`, else it will run in the background).
+- You may want to get [Ecthelion](https://github.com/retrixe/ecthelion) as aforementioned in the description, as a web app to manage Octyne.
 
 ### Usage
 
 To get the current Octyne version, you can run `./octyne --version` or `./octyne -v`. This does not account for development builds.
 
-[You might want to manage octyne using systemd on Linux systems, which can start and stop Octyne, start it on boot, store its logs and restart it on crash. This article should help you out.](https://medium.com/@benmorel/creating-a-linux-service-with-systemd-611b5c8b91d6)
+You might want to manage octyne using systemd on Linux systems, which can start and stop Octyne, start it on boot, store its logs and restart it on crash. [This article should help you out.](https://medium.com/@benmorel/creating-a-linux-service-with-systemd-611b5c8b91d6)
 
 ## Configuration
 
