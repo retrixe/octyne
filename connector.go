@@ -3,9 +3,6 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -132,7 +129,8 @@ func InitializeConnector(config *Config) *Connector {
 		POST /server/{id}/compress?path=path&compress=true/false (compress is optional, default: true)
 		POST /server/{id}/decompress?path=path
 	*/
-	connector.registerRoutes()
+	connector.registerMiscRoutes()
+	connector.registerAuthRoutes()
 	connector.registerFileRoutes()
 	return connector
 }
@@ -176,50 +174,21 @@ func (connector *Connector) AddProcess(proc *Process) {
 	})()
 }
 
-func (connector *Connector) registerRoutes() {
+func httpError(w http.ResponseWriter, error string, code int) {
+	errorJson, err := json.Marshal(struct {
+		Error string `json:"error"`
+	}{Error: error})
+	if err == nil {
+		http.Error(w, string(errorJson), code)
+	} else {
+		http.Error(w, "{\"error\": \"Internal Server Error!\"}", http.StatusInternalServerError)
+	}
+}
+
+func (connector *Connector) registerMiscRoutes() {
 	// GET /
 	connector.Router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "{\"version\": \""+OctyneVersion+"\"}")
-	})
-
-	// GET /login
-	type loginResponse struct {
-		Token string `json:"token"`
-	}
-	connector.Router.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
-		// In case the username and password headers don't exist.
-		username := r.Header.Get("Username")
-		password := r.Header.Get("Password")
-		if username == "" || password == "" {
-			http.Error(w, "{\"error\":\"Username or password not provided!\"}", http.StatusBadRequest)
-			return
-		}
-		// Authorize the user.
-		token := connector.Login(username, password)
-		if token == "" {
-			http.Error(w, "{\"error\":\"Invalid username or password!\"}", http.StatusUnauthorized)
-			return
-		}
-		// Send the response.
-		json.NewEncoder(w).Encode(loginResponse{Token: token}) // skipcq GSC-G104
-	})
-
-	// GET /logout
-	connector.Router.HandleFunc("/logout", func(w http.ResponseWriter, r *http.Request) {
-		// In case the authorization header doesn't exist.
-		token := r.Header.Get("Authorization")
-		if token == "" {
-			http.Error(w, "{\"error\":\"Token not provided!\"}", http.StatusBadRequest)
-			return
-		}
-		// Authorize the user.
-		success := connector.Logout(token)
-		if !success {
-			http.Error(w, "{\"error\":\"Invalid token, failed to logout!\"}", http.StatusUnauthorized)
-			return
-		}
-		// Send the response.
-		fmt.Fprintln(w, "{\"success\":true}")
 	})
 
 	// GET /config/reload
@@ -233,13 +202,13 @@ func (connector *Connector) registerRoutes() {
 		contents, err := os.ReadFile("config.json")
 		if err != nil {
 			log.Println("An error occurred while attempting to read config! " + err.Error())
-			http.Error(w, "{\"error\":\"An error occurred while reading config!\"}", http.StatusInternalServerError)
+			httpError(w, "An error occurred while reading config!", http.StatusInternalServerError)
 			return
 		}
 		err = json.Unmarshal(contents, &config)
 		if err != nil {
 			log.Println("An error occurred while attempting to parse config! " + err.Error())
-			http.Error(w, "{\"error\":\"An error occurred while parsing config!\"}", http.StatusInternalServerError)
+			httpError(w, "An error occurred while parsing config!", http.StatusInternalServerError)
 			return
 		}
 		// Replace authenticator if changed. We are guaranteed that Authenticator is Replaceable.
@@ -288,83 +257,6 @@ func (connector *Connector) registerRoutes() {
 		info.Println("Config reloaded successfully!")
 	})
 
-	// POST /accounts
-	// PATCH /accounts
-	// DELETE /accounts?username=username
-	type accountsRequestBody struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
-	}
-	connector.Router.HandleFunc("/accounts", func(w http.ResponseWriter, r *http.Request) {
-		if !connector.Validate(w, r) {
-			return
-		} else if r.Method != "POST" && r.Method != "PATCH" && r.Method != "DELETE" {
-			http.Error(w, "{\"error\":\"Only POST, PATCH and DELETE are allowed!\"}", http.StatusMethodNotAllowed)
-			return
-		}
-		var users map[string]string
-		contents, err := os.ReadFile("users.json")
-		if err != nil {
-			log.Println("Error reading users.json when modifying accounts!", err)
-			http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
-			return
-		}
-		err = json.Unmarshal(contents, &users)
-		if err != nil {
-			log.Println("Error parsing users.json when modifying accounts!", err)
-			http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
-			return
-		}
-		if r.Method == "POST" || r.Method == "PATCH" {
-			var buffer bytes.Buffer
-			_, err := buffer.ReadFrom(r.Body)
-			if err != nil {
-				http.Error(w, "{\"error\":\"Failed to read body!\"}", http.StatusBadRequest)
-				return
-			}
-			var body accountsRequestBody
-			err = json.Unmarshal(buffer.Bytes(), &body)
-			if err != nil {
-				http.Error(w, "{\"error\":\"Invalid JSON body!\"}", http.StatusBadRequest)
-				return
-			} else if body.Username == "" || body.Password == "" {
-				http.Error(w, "{\"error\":\"Username or password not provided!\"}", http.StatusBadRequest)
-				return
-			} else if r.Method == "POST" && users[body.Username] != "" {
-				http.Error(w, "{\"error\":\"User already exists!\"}", http.StatusConflict)
-				return
-			} else if r.Method == "PATCH" && users[body.Username] == "" {
-				http.Error(w, "{\"error\":\"User does not exist!\"}", http.StatusNotFound)
-				return
-			}
-			sha256sum := fmt.Sprintf("%x", sha256.Sum256([]byte(body.Password)))
-			users[body.Username] = sha256sum
-		} else if r.Method == "DELETE" {
-			username := r.URL.Query().Get("username")
-			if username == "" {
-				http.Error(w, "{\"error\":\"Username not provided!\"}", http.StatusBadRequest)
-				return
-			} else if users[username] == "" {
-				http.Error(w, "{\"error\":\"User does not exist!\"}", http.StatusNotFound)
-				return
-			}
-			delete(users, username)
-		}
-		usersJson, err := json.MarshalIndent(users, "", "  ")
-		if err != nil {
-			log.Println("Error serialising users.json when modifying accounts!")
-			http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
-			return
-		}
-		err = os.WriteFile("users.json", []byte(string(usersJson)+"\n"), 0666)
-		if err != nil {
-			log.Println("Error writing to users.json when modifying accounts!")
-			http.Error(w, "{\"error\":\"Internal Server Error!\"}", http.StatusInternalServerError)
-			return
-		}
-		fmt.Fprintln(w, "{\"success\":true}")
-	})
-
 	// GET /servers
 	type serversResponse struct {
 		Servers map[string]int `json:"servers"`
@@ -382,34 +274,6 @@ func (connector *Connector) registerRoutes() {
 		})
 		// Send the list.
 		json.NewEncoder(w).Encode(serversResponse{Servers: processes}) // skipcq GSC-G104
-	})
-
-	// GET /ott
-	connector.Router.HandleFunc("/ott", func(w http.ResponseWriter, r *http.Request) {
-		// Check with authenticator.
-		if !connector.Validate(w, r) {
-			return
-		}
-		// Add a ticket.
-		ticket := make([]byte, 4)
-		rand.Read(ticket) // Tolerate errors here, an error here is incredibly unlikely: skipcq GSC-G104
-		ticketString := base64.StdEncoding.EncodeToString(ticket)
-		(func() {
-			connector.TicketsLock.Lock()
-			defer connector.TicketsLock.Unlock()
-			connector.Tickets[ticketString] = Ticket{
-				Time:   time.Now().Unix(),
-				Token:  r.Header.Get("Authorization"),
-				IPAddr: GetIP(r),
-			}
-		})()
-		// Schedule deletion (cancellable).
-		go (func() {
-			<-time.After(2 * time.Minute)
-			connector.DeleteTicket(ticketString)
-		})()
-		// Send the response.
-		fmt.Fprintln(w, "{\"ticket\": \""+ticketString+"\"}")
 	})
 
 	// GET /server/{id}
@@ -432,7 +296,7 @@ func (connector *Connector) registerRoutes() {
 		process, err := connector.Processes.Get(id)
 		// In case the process doesn't exist.
 		if !err {
-			http.Error(w, "{\"error\":\"This server does not exist!\"}", http.StatusNotFound)
+			httpError(w, "This server does not exist!", http.StatusNotFound)
 			return
 		}
 		// POST /server/{id}
@@ -441,7 +305,7 @@ func (connector *Connector) registerRoutes() {
 			var body bytes.Buffer
 			_, err := body.ReadFrom(r.Body)
 			if err != nil {
-				http.Error(w, "{\"error\":\"Failed to read body!\"}", http.StatusBadRequest)
+				httpError(w, "Failed to read body!", http.StatusBadRequest)
 				return
 			}
 			operation := strings.ToUpper(body.String())
@@ -465,7 +329,7 @@ func (connector *Connector) registerRoutes() {
 				res["success"] = true
 				json.NewEncoder(w).Encode(res) // skipcq GSC-G104
 			} else {
-				http.Error(w, "{\"error\":\"Invalid operation requested!\"}", http.StatusBadRequest)
+				httpError(w, "Invalid operation requested!", http.StatusBadRequest)
 				return
 			}
 			// GET /server/{id}
@@ -481,8 +345,7 @@ func (connector *Connector) registerRoutes() {
 				stat, err = system.GetProcessStats(process.Command.Process.Pid)
 				if err != nil {
 					log.Println("Failed to get server statistics for "+process.Name+"! Is ps available?", err)
-					http.Error(w, "{\"error\":\"Internal Server Error!\"}",
-						http.StatusInternalServerError)
+					httpError(w, "Internal Server Error!", http.StatusInternalServerError)
 					return
 				}
 			}
@@ -501,7 +364,7 @@ func (connector *Connector) registerRoutes() {
 			}
 			json.NewEncoder(w).Encode(res) // skipcq GSC-G104
 		} else {
-			http.Error(w, "{\"error\":\"Only GET and POST is allowed!\"}", http.StatusMethodNotAllowed)
+			httpError(w, "Only GET and POST is allowed!", http.StatusMethodNotAllowed)
 		}
 	})
 
@@ -530,7 +393,7 @@ func (connector *Connector) registerRoutes() {
 		process, exists := connector.Processes.Get(id)
 		// In case the server doesn't exist.
 		if !exists {
-			http.Error(w, "{\"error\":\"This server does not exist!\"", http.StatusNotFound)
+			httpError(w, "This server does not exist!", http.StatusNotFound)
 			return
 		}
 		// Upgrade WebSocket connection.
