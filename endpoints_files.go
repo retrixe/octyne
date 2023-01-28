@@ -98,7 +98,6 @@ func (connector *Connector) registerFileRoutes() {
 	})
 
 	// GET /server/{id}/file?path=path&ticket=ticket
-	// DOWNLOAD /server/{id}/file?path=path
 	// POST /server/{id}/file?path=path
 	// DELETE /server/{id}/file?path=path
 	// PATCH /server/{id}/file?path=path
@@ -132,6 +131,9 @@ func (connector *Connector) registerFileRoutes() {
 			if err != nil || err1 != nil {
 				httpError(w, "This file does not exist!", http.StatusNotFound)
 				return
+			} else if !stat.Mode().IsRegular() {
+				httpError(w, "This is not a file!", http.StatusBadRequest)
+				return
 			}
 			// Send the response.
 			buffer := make([]byte, 512)
@@ -150,7 +152,7 @@ func (connector *Connector) registerFileRoutes() {
 				return
 			}
 			_, err := os.Stat(filePath)
-			if err != nil || os.IsNotExist(err) {
+			if err != nil && os.IsNotExist(err) {
 				httpError(w, "This file does not exist!", http.StatusNotFound)
 				return
 			}
@@ -182,13 +184,13 @@ func (connector *Connector) registerFileRoutes() {
 			// read the file.
 			filePath = joinPath(process.Directory, r.URL.Query().Get("path"), meta.Filename)
 			toWrite, err := os.Create(filePath)
-			stat, err1 := toWrite.Stat()
-			if err != nil {
+			stat, statErr := os.Stat(filePath)
+			if statErr == nil && stat.IsDir() {
+				httpError(w, "This is a folder!", http.StatusBadRequest)
+				return
+			} else if err != nil {
 				log.Println("An error occurred when writing to "+filePath, "("+process.Name+")", err)
 				httpError(w, "Internal Server Error!", http.StatusInternalServerError)
-				return
-			} else if err1 == nil && stat.IsDir() {
-				httpError(w, "This is a folder!", http.StatusBadRequest)
 				return
 			}
 			defer toWrite.Close()
@@ -366,7 +368,7 @@ func (connector *Connector) registerFileRoutes() {
 			}
 			_, exists := os.Stat(zipPath)
 			if !os.IsNotExist(exists) {
-				httpError(w, "A file already exists at the path of requested ZIP!", http.StatusBadRequest)
+				httpError(w, "A file/folder already exists at the path of requested ZIP!", http.StatusBadRequest)
 				return
 			}
 
