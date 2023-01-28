@@ -205,17 +205,36 @@ func (connector *Connector) registerFileRoutes() {
 				httpError(w, "Failed to read body!", http.StatusBadRequest)
 				return
 			}
-			operation := strings.Split(body.String(), "\n")
-			// Possible operations: mv, cp
-			if operation[0] == "mv" || operation[0] == "cp" {
-				if len(operation) != 3 {
-					httpError(w, operation[0]+" operation requires two arguments!", http.StatusMethodNotAllowed)
+			// If the body doesn't start with {, parse as a legacy request. Remove this in Octyne 2.0.
+			// Legacy requests will not support anything further than mv/cp operations.
+			var req struct {
+				Operation string `json:"operation"`
+				Src       string `json:"src"`
+				Dest      string `json:"dest"`
+			}
+			if strings.TrimSpace(body.String())[0] != '{' {
+				split := strings.Split(body.String(), "\n")
+				if len(split) != 3 {
+					if split[0] == "mv" || split[0] == "cp" {
+						httpError(w, split[0]+" operation requires two arguments!", http.StatusMethodNotAllowed)
+					} else {
+						httpError(w, "Invalid operation! Operations available: mv,cp", http.StatusMethodNotAllowed)
+					}
 					return
 				}
+				req.Operation = split[0]
+				req.Src = split[1]
+				req.Dest = split[2]
+			} else if err = json.Unmarshal(body.Bytes(), &req); err != nil {
+				httpError(w, "Invalid JSON body!", http.StatusBadRequest)
+				return
+			}
+			// Possible operations: mv, cp
+			if req.Operation == "mv" || req.Operation == "cp" {
 				// Check if original file exists.
 				// TODO: Needs better sanitation.
-				oldpath := joinPath(process.Directory, operation[1])
-				newpath := joinPath(process.Directory, operation[2])
+				oldpath := joinPath(process.Directory, req.Src)
+				newpath := joinPath(process.Directory, req.Dest)
 				if !strings.HasPrefix(oldpath, path.Clean(process.Directory)) ||
 					!strings.HasPrefix(newpath, path.Clean(process.Directory)) {
 					httpError(w, "The files requested are outside the server!", http.StatusForbidden)
@@ -242,7 +261,7 @@ func (connector *Connector) registerFileRoutes() {
 					return
 				}
 				// Move file if operation is mv.
-				if operation[0] == "mv" {
+				if req.Operation == "mv" {
 					err := os.Rename(oldpath, newpath)
 					if err != nil && err.(*os.LinkError).Err != nil && err.(*os.LinkError).Err.Error() ==
 						"The process cannot access the file because it is being used by another process." {
