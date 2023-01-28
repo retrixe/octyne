@@ -22,6 +22,11 @@ func joinPath(elem ...string) string {
 	return filepath.FromSlash(path.Join(elem...))
 }
 
+// clean combines path.Clean with filepath.FromSlash.
+func clean(pathToClean string) string {
+	return filepath.FromSlash(path.Clean(pathToClean))
+}
+
 func (connector *Connector) registerFileRoutes() {
 	// GET /server/{id}/files?path=path
 	type serverFilesResponse struct {
@@ -48,7 +53,7 @@ func (connector *Connector) registerFileRoutes() {
 		process.ServerConfigMutex.RLock()
 		defer process.ServerConfigMutex.RUnlock()
 		folderPath := joinPath(process.Directory, r.URL.Query().Get("path"))
-		if !strings.HasPrefix(folderPath, path.Clean(process.Directory)) {
+		if !strings.HasPrefix(folderPath, clean(process.Directory)) {
 			httpError(w, "The folder requested is outside the server!", http.StatusForbidden)
 			return
 		}
@@ -120,7 +125,7 @@ func (connector *Connector) registerFileRoutes() {
 		defer process.ServerConfigMutex.RUnlock()
 		filePath := joinPath(process.Directory, r.URL.Query().Get("path"))
 		if (r.Method == "GET" || r.Method == "POST" || r.Method == "DELETE") &&
-			!strings.HasPrefix(filePath, path.Clean(process.Directory)) {
+			!strings.HasPrefix(filePath, clean(process.Directory)) {
 			httpError(w, "The file requested is outside the server!", http.StatusForbidden)
 			return
 		}
@@ -235,8 +240,8 @@ func (connector *Connector) registerFileRoutes() {
 				// TODO: Needs better sanitation.
 				oldpath := joinPath(process.Directory, req.Src)
 				newpath := joinPath(process.Directory, req.Dest)
-				if !strings.HasPrefix(oldpath, path.Clean(process.Directory)) ||
-					!strings.HasPrefix(newpath, path.Clean(process.Directory)) {
+				if !strings.HasPrefix(oldpath, clean(process.Directory)) ||
+					!strings.HasPrefix(newpath, clean(process.Directory)) {
 					httpError(w, "The files requested are outside the server!", http.StatusForbidden)
 					return
 				}
@@ -310,7 +315,7 @@ func (connector *Connector) registerFileRoutes() {
 			defer process.ServerConfigMutex.RUnlock()
 			file := joinPath(process.Directory, r.URL.Query().Get("path"))
 			// Check if folder is in the process directory or not.
-			if !strings.HasPrefix(file, path.Clean(process.Directory)) {
+			if !strings.HasPrefix(file, clean(process.Directory)) {
 				httpError(w, "The folder requested is outside the server!", http.StatusForbidden)
 				return
 			}
@@ -366,7 +371,7 @@ func (connector *Connector) registerFileRoutes() {
 			defer process.ServerConfigMutex.RUnlock()
 			for _, file := range files {
 				filepath := joinPath(process.Directory, file)
-				if !strings.HasPrefix(filepath, path.Clean(process.Directory)) {
+				if !strings.HasPrefix(filepath, clean(process.Directory)) {
 					httpError(w, "One of the paths provided is outside the server directory!", http.StatusForbidden)
 					return
 				} else if _, err := os.Stat(filepath); err != nil {
@@ -381,7 +386,7 @@ func (connector *Connector) registerFileRoutes() {
 			}
 			// Check if a file exists at the location of the ZIP file.
 			zipPath := joinPath(process.Directory, r.URL.Query().Get("path"))
-			if !strings.HasPrefix(zipPath, path.Clean(process.Directory)) {
+			if !strings.HasPrefix(zipPath, clean(process.Directory)) {
 				httpError(w, "The requested ZIP file is outside the server directory!", http.StatusForbidden)
 				return
 			}
@@ -432,7 +437,7 @@ func (connector *Connector) registerFileRoutes() {
 		}
 		process.ServerConfigMutex.RLock()
 		defer process.ServerConfigMutex.RUnlock()
-		directory := path.Clean(process.Directory)
+		directory := clean(process.Directory)
 		if r.Method == "POST" {
 			// Check if the ZIP file exists.
 			zipPath := joinPath(directory, r.URL.Query().Get("path"))
@@ -440,13 +445,16 @@ func (connector *Connector) registerFileRoutes() {
 				httpError(w, "The ZIP file is outside the server directory!", http.StatusForbidden)
 				return
 			}
-			_, exists := os.Stat(zipPath)
+			zipStat, exists := os.Stat(zipPath)
 			if os.IsNotExist(exists) {
 				httpError(w, "The requested ZIP does not exist!", http.StatusBadRequest)
 				return
 			} else if exists != nil {
 				log.Println("An error occurred when checking "+zipPath+" ZIP file exists", "("+process.Name+")", err)
 				httpError(w, "Internal Server Error!", http.StatusInternalServerError)
+				return
+			} else if zipStat.IsDir() {
+				httpError(w, "The requested ZIP is a folder!", http.StatusBadRequest)
 				return
 			}
 			// Check if there is a file/folder at the destination.
