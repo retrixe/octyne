@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/retrixe/octyne/auth"
 )
 
 func (connector *Connector) registerAuthRoutes() {
@@ -32,24 +34,45 @@ func (connector *Connector) registerAuthRoutes() {
 			httpError(w, "Invalid username or password!", http.StatusUnauthorized)
 			return
 		}
+		// Set the authentication cookie, if requested.
+		if r.URL.Query().Get("cookie") == "true" {
+			http.SetCookie(w, &http.Cookie{
+				Name:   "X-Authentication",
+				Value:  token,
+				MaxAge: 60 * 60 * 24 * 31 * 3, // 3 months
+				// Allows HTTP usage. Strict SameSite will block sending cookie over HTTP when using HTTPS:
+				// https://web.dev/same-site-same-origin/
+				Secure:   false,
+				HttpOnly: true,
+				SameSite: http.SameSiteStrictMode,
+			})
+		}
 		// Send the response.
 		json.NewEncoder(w).Encode(loginResponse{Token: token}) // skipcq GSC-G104
 	})
 
 	// GET /logout
 	connector.Router.HandleFunc("/logout", func(w http.ResponseWriter, r *http.Request) {
-		// In case the authorization header doesn't exist.
-		token := r.Header.Get("Authorization")
-		if token == "" {
-			httpError(w, "Token not provided!", http.StatusBadRequest)
+		// Check with authenticator.
+		if !connector.Validate(w, r) {
 			return
 		}
+		token := auth.GetTokenFromRequest(r)
 		// Authorize the user.
 		success := connector.Logout(token)
 		if !success {
 			httpError(w, "Invalid token, failed to logout!", http.StatusUnauthorized)
 			return
 		}
+		// Unset the authentication cookie.
+		http.SetCookie(w, &http.Cookie{
+			Name:     "X-Authentication",
+			Value:    "",
+			MaxAge:   -1,
+			Secure:   false,
+			HttpOnly: true,
+			SameSite: http.SameSiteStrictMode,
+		})
 		// Send the response.
 		fmt.Fprintln(w, "{\"success\":true}")
 	})
@@ -60,6 +83,7 @@ func (connector *Connector) registerAuthRoutes() {
 		if !connector.Validate(w, r) {
 			return
 		}
+		token := auth.GetTokenFromRequest(r)
 		// Add a ticket.
 		ticket := make([]byte, 4)
 		rand.Read(ticket) // Tolerate errors here, an error here is incredibly unlikely: skipcq GSC-G104
@@ -69,7 +93,7 @@ func (connector *Connector) registerAuthRoutes() {
 			defer connector.TicketsLock.Unlock()
 			connector.Tickets[ticketString] = Ticket{
 				Time:   time.Now().Unix(),
-				Token:  r.Header.Get("Authorization"),
+				Token:  token,
 				IPAddr: GetIP(r),
 			}
 		})()

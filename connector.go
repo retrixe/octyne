@@ -379,14 +379,9 @@ func (connector *Connector) registerMiscRoutes() {
 			return
 		}
 		// Retrieve the token.
-		token := r.Header.Get("Authorization")
+		token := auth.GetTokenFromRequest(r)
 		if e {
 			token = t.Token
-		} else if r.Header.Get("Cookie") != "" && token == "" {
-			cookie, exists := r.Cookie("X-Authentication")
-			if exists == nil {
-				token = cookie.Value
-			}
 		}
 		// Get the server being accessed.
 		id := mux.Vars(r)["id"]

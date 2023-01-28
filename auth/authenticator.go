@@ -61,9 +61,9 @@ func (a *ReplaceableAuthenticator) Close() error {
 
 // Miscellaneous utilities:
 
-func getTokenFromRequest(r *http.Request) string {
+// GetTokenFromRequest gets the token from the request header or cookie.
+func GetTokenFromRequest(r *http.Request) string {
 	token := r.Header.Get("Authorization")
-	// For WebSockets, special case.
 	if r.Header.Get("Cookie") != "" && token == "" {
 		cookie, exists := r.Cookie("X-Authentication")
 		if exists == nil {
