@@ -7,6 +7,7 @@ type Config struct {
 	Port    uint16                  `json:"port"`
 	HTTPS   HTTPSConfig             `json:"https"`
 	Redis   RedisConfig             `json:"redis"`
+	Logging LoggingConfig           `json:"logging"`
 	Servers map[string]ServerConfig `json:"servers"`
 }
 
@@ -37,4 +38,37 @@ func (c *ServerConfig) UnmarshalJSON(data []byte) error {
 	err := json.Unmarshal(data, conf)
 	*c = ServerConfig(*conf)
 	return err
+}
+
+// LoggingConfig is the config for action logging.
+type LoggingConfig struct {
+	Enabled bool            `json:"enabled"`
+	Path    string          `json:"path"`
+	Actions map[string]bool `json:"actions"`
+}
+
+// UnmarshalJSON unmarshals LoggingConfig and sets default values.
+func (c *LoggingConfig) UnmarshalJSON(data []byte) error {
+	type alias LoggingConfig // Prevent recursive calls to UnmarshalJSON.
+	conf := &alias{Enabled: true, Path: "logs"}
+	conf.Actions = map[string]bool{
+		"server.getStats":   false,
+		"server.files.list": false,
+	}
+	err := json.Unmarshal(data, conf)
+	*c = LoggingConfig(*conf)
+	return err
+}
+
+// ShouldLog returns whether or not a particular action should be logged.
+func (c *LoggingConfig) ShouldLog(action string) bool {
+	if !c.Enabled {
+		return false
+	} else if c.Actions == nil {
+		return true
+	} else if value, exists := c.Actions[action]; !exists {
+		return true
+	} else {
+		return value
+	}
 }

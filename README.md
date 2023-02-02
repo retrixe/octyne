@@ -44,6 +44,11 @@ Used to configure the apps Octyne should start, Redis-based authentication for a
     "cert": "/path/to/cert.pem", // path to HTTPS certificate
     "key": "/path/to/key.pem" // path to HTTPS private key
   },
+  "logging": {
+    "enabled": true, // whether Octyne should log actions
+    "path": "logs", // path to log files, can be relative or absolute
+    "actions": {} // optional, see the logging section below for info
+  },
   "servers": {
     "test1": { // each key has the name of the server
       "enabled": true, // optional, default true, Octyne won't auto-start when false
@@ -63,3 +68,24 @@ Contains users who can log into Octyne. Use a secure method to hash your passwor
   "username": "password hashed with SHA-256"
 }
 ```
+
+### Logging
+
+By default, Octyne will log all actions performed by users, except for basic read-only actions (currently, `server.getStats` and `server.files.list`). You can enable/disable logging for [specific actions](#actions) by setting the value of the action to `true` or `false` in the `logging.actions` object. For example, to disable logging for the `auth.login` and `auth.logout` actions:
+
+```json
+"actions": {
+  "auth.login": false,
+  "auth.logout": false
+}
+```
+
+### Actions
+
+- Authentication (`auth`): `login`, `logout`
+- Configuration (`config`): `reload`
+- Account management (`accounts`): `create`, `edit`, `delete`
+- Server management (`server`):
+  - Top-level actions: `start`, `stop`, `getStats`
+  - Console (`server.console`): `access`, `sendInput`
+  - Files (`server.files`): `list`, `upload`, `download`, `createFolder`, `delete`, `move`, `copy`, `compress`, `decompress`
