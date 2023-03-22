@@ -46,6 +46,8 @@ func (connector *Connector) registerAuthRoutes() {
 				HttpOnly: true,
 				SameSite: http.SameSiteStrictMode,
 			})
+			fmt.Fprintln(w, "{\"success\":true}")
+			return
 		}
 		// Send the response.
 		json.NewEncoder(w).Encode(loginResponse{Token: token}) // skipcq GSC-G104
