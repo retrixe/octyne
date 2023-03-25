@@ -98,7 +98,7 @@ func InitializeConnector(config *Config) *Connector {
 		Processes:     processMap{},
 		Tickets:       make(map[string]Ticket),
 		Authenticator: &auth.ReplaceableAuthenticator{Engine: authenticator},
-		Upgrader:      &websocket.Upgrader{},
+		Upgrader:      &websocket.Upgrader{Subprotocols: []string{"console-v2"}},
 	}
 	// Initialize all routes for the connector.
 	/*
@@ -393,8 +393,20 @@ func (connector *Connector) registerMiscRoutes() {
 		}
 		// Upgrade WebSocket connection.
 		c, err := connector.Upgrade(w, r, nil)
+		v2 := c.Subprotocol() == "console-v2"
 		if err == nil {
 			defer c.Close()
+			// Setup deadlines.
+			limit := 30 * time.Second
+			c.SetReadLimit(1024 * 1024) // Limit WebSocket reads to 1 MB.
+			c.SetReadDeadline(time.Now().Add(limit))
+			c.SetPongHandler(func(string) error { c.SetReadDeadline(time.Now().Add(limit)); return nil })
+			// If v2, send settings.
+			if v2 {
+				c.WriteJSON(struct { // skipcq GSC-G104
+					Type string `json:"type"`
+				}{"settings"})
+			}
 			// Use a channel to synchronise all writes to the WebSocket.
 			writeToWs := make(chan []byte, 8)
 			defer close(writeToWs)
@@ -407,7 +419,14 @@ func (connector *Connector) registerMiscRoutes() {
 						c.Close()
 						break
 					}
-					c.WriteMessage(websocket.TextMessage, data) // skipcq GSC-G104
+					if v2 {
+						c.WriteJSON(struct { // skipcq GSC-G104
+							Type string `json:"type"`
+							Data string `json:"data"`
+						}{"output", string(data)})
+					} else {
+						c.WriteMessage(websocket.TextMessage, data) // skipcq GSC-G104
+					}
 				}
 			})()
 			// Add connection to the process after sending current console output.
@@ -440,7 +459,32 @@ func (connector *Connector) registerMiscRoutes() {
 					delete(process.Clients, token)
 					break // The WebSocket connection has terminated.
 				}
-				process.SendCommand(string(message))
+				if v2 {
+					var data map[string]string
+					err := json.Unmarshal(message, &data)
+					if err == nil {
+						if data["type"] == "input" && data["data"] != "" {
+							process.SendCommand(data["data"])
+						} else if data["type"] == "ping" {
+							c.WriteJSON(struct { // skipcq GSC-G104
+								Type string `json:"type"`
+								ID   string `json:"id"`
+							}{"pong", data["id"]})
+						} else {
+							c.WriteJSON(struct { // skipcq GSC-G104
+								Type    string `json:"type"`
+								Message string `json:"message"`
+							}{"error", "Invalid message type: " + data["type"]})
+						}
+					} else {
+						c.WriteJSON(struct { // skipcq GSC-G104
+							Type    string `json:"type"`
+							Message string `json:"message"`
+						}{"error", "Invalid message format"})
+					}
+				} else {
+					process.SendCommand(string(message))
+				}
 			}
 		}
 	})
