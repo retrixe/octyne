@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -56,7 +57,7 @@ func main() {
 			MaxSize:  1, // megabytes
 		})
 	} else {
-		w = zapcore.AddSync(nil)
+		w = zapcore.AddSync(io.Discard)
 	}
 	core := zapcore.NewCore(
 		zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()),
@@ -65,6 +66,7 @@ func main() {
 	)
 	logger = zap.New(core)
 	defer logger.Sync()
+	defer os.Exit(1)
 
 	// Get a slice of server names.
 	servers := make([]string, 0, len(config.Servers))
@@ -84,6 +86,7 @@ func main() {
 	// Listen.
 	port := getPort(&config)
 	info.Println("Listening to port " + port[1:])
+	logger.Info("Listening to port " + port[1:])
 	handler := handlers.CORS(
 		handlers.AllowedHeaders([]string{
 			"X-Requested-With", "Content-Type", "Authorization", "Username", "Password",
@@ -105,5 +108,5 @@ func main() {
 	if authenticatorErr := connector.Authenticator.Close(); authenticatorErr != nil {
 		log.Println("Error when closing the authenticator!", authenticatorErr)
 	}
-	log.Fatalln(err) // skipcq: GO-S0904
+	log.Println(err) // skipcq: GO-S0904
 }

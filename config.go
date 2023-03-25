@@ -16,10 +16,7 @@ var defaultConfig = Config{
 	Logging: LoggingConfig{
 		Enabled: true,
 		Path:    "logs",
-		Actions: map[string]bool{
-			"server.getStats":   false,
-			"server.files.list": false,
-		},
+		Actions: map[string]bool{},
 	},
 }
 

@@ -71,7 +71,7 @@ Contains users who can log into Octyne. Use a secure method to hash your passwor
 
 ### Logging
 
-By default, Octyne will log all actions performed by users, except for basic read-only actions (currently, `server.getStats` and `server.files.list`). You can enable/disable logging for [specific actions](#actions) by setting the value of the action to `true` or `false` in the `logging.actions` object. For example, to disable logging for the `auth.login` and `auth.logout` actions:
+By default, Octyne will log all actions performed by users. You can enable/disable logging for [specific actions](#actions) by setting the value of the action to `true` or `false` in the `logging.actions` object. For example, to disable logging for the `auth.login` and `auth.logout` actions:
 
 ```json
 "actions": {
@@ -86,6 +86,6 @@ By default, Octyne will log all actions performed by users, except for basic rea
 - Configuration (`config`): `reload`
 - Account management (`accounts`): `create`, `edit`, `delete`
 - Server management (`server`):
-  - Top-level actions: `start`, `stop`, `getStats`
+  - Top-level actions: `start`, `stop`
   - Console (`server.console`): `access`, `sendInput`
-  - Files (`server.files`): `list`, `upload`, `download`, `createFolder`, `delete`, `move`, `copy`, `compress`, `decompress`
+  - Files (`server.files`): `upload`, `download`, `createFolder`, `delete`, `move`, `copy`, `compress`, `decompress`
