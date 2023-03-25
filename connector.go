@@ -14,6 +14,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
+	"github.com/puzpuzpuz/xsync/v2"
 	"github.com/retrixe/octyne/auth"
 	"github.com/retrixe/octyne/system"
 )
@@ -21,9 +22,8 @@ import (
 // An internal representation of Process along with the clients connected to it and its output.
 type managedProcess struct {
 	*Process
-	Clients     map[string]chan []byte
+	Clients     *xsync.MapOf[string, chan []byte]
 	Console     string
-	ClientsLock sync.RWMutex
 	ConsoleLock sync.RWMutex
 }
 
@@ -34,41 +34,13 @@ type Ticket struct {
 	IPAddr string
 }
 
-type processMap struct{ sync.Map }
-
-// Get gets a *processInt from a processMap using Load function and type-casting.
-func (p *processMap) Get(name string) (*managedProcess, bool) {
-	item, ok := p.Load(name)
-	if !ok {
-		return nil, ok
-	}
-	process, ok := item.(*managedProcess)
-	return process, ok
-}
-
 // Connector is used to create an HTTP API for external apps to talk with octyne.
 type Connector struct {
 	auth.Authenticator
 	*mux.Router
 	*websocket.Upgrader
-	Processes   processMap
-	Tickets     map[string]Ticket
-	TicketsLock sync.RWMutex
-}
-
-// DeleteTicket deletes a ticket from the Connector and handles the TicketsLock.
-func (connector *Connector) DeleteTicket(id string) {
-	connector.TicketsLock.Lock()
-	defer connector.TicketsLock.Unlock()
-	delete(connector.Tickets, id)
-}
-
-// GetTicket gets a ticket from the Connector and handles the TicketsLock.
-func (connector *Connector) GetTicket(id string) (Ticket, bool) {
-	connector.TicketsLock.RLock()
-	defer connector.TicketsLock.RUnlock()
-	a, b := connector.Tickets[id]
-	return a, b
+	Processes *xsync.MapOf[string, *managedProcess]
+	Tickets   *xsync.MapOf[string, Ticket]
 }
 
 // GetIP gets an IP address from http.Request.RemoteAddr.
@@ -95,8 +67,8 @@ func InitializeConnector(config *Config) *Connector {
 	// Create the connector.
 	connector := &Connector{
 		Router:        mux.NewRouter().StrictSlash(true),
-		Processes:     processMap{},
-		Tickets:       make(map[string]Ticket),
+		Processes:     xsync.NewMapOf[*managedProcess](),
+		Tickets:       xsync.NewMapOf[Ticket](),
 		Authenticator: &auth.ReplaceableAuthenticator{Engine: authenticator},
 		Upgrader:      &websocket.Upgrader{Subprotocols: []string{"console-v2"}},
 	}
@@ -139,7 +111,7 @@ func InitializeConnector(config *Config) *Connector {
 func (connector *Connector) AddProcess(proc *Process) {
 	process := &managedProcess{
 		Process: proc,
-		Clients: make(map[string]chan []byte),
+		Clients: xsync.NewMapOf[chan []byte](),
 		Console: "",
 	}
 	connector.Processes.Store(process.Name, process)
@@ -162,11 +134,10 @@ func (connector *Connector) AddProcess(proc *Process) {
 						process.Console = strings.Join(truncate[len(truncate)-2500:], "\n")
 					}
 					process.Console = process.Console + "\n" + m
-					process.ClientsLock.RLock()
-					defer process.ClientsLock.RUnlock()
-					for _, connection := range process.Clients {
+					process.Clients.Range(func(key string, connection chan []byte) bool {
 						connection <- []byte(m)
-					}
+						return true
+					})
 				})()
 			}
 			log.Println("Error in " + process.Name + " console: " + scanner.Err().Error())
@@ -227,26 +198,25 @@ func (connector *Connector) registerMiscRoutes() {
 		}
 		// Add new processes.
 		for key := range config.Servers {
-			if _, ok := connector.Processes.Get(key); !ok {
+			if _, ok := connector.Processes.Load(key); !ok {
 				go CreateProcess(key, config.Servers[key], connector)
 			}
 		}
 		// Modify/remove existing processes.
-		connector.Processes.Range(func(key, value interface{}) bool {
-			serverConfig, ok := config.Servers[key.(string)]
+		connector.Processes.Range(func(key string, value *managedProcess) bool {
+			serverConfig, ok := config.Servers[key]
 			if ok {
-				value.(*managedProcess).Process.ServerConfigMutex.Lock()
-				defer value.(*managedProcess).Process.ServerConfigMutex.Unlock()
-				value.(*managedProcess).Process.ServerConfig = serverConfig
+				value.Process.ServerConfigMutex.Lock()
+				defer value.Process.ServerConfigMutex.Unlock()
+				value.Process.ServerConfig = serverConfig
 			} else {
-				if value, loaded := connector.Processes.LoadAndDelete(key.(string)); loaded { // Yes, this is safe.
-					value.(*managedProcess).KillProcess() // Other goroutines will cleanup.
-					value.(*managedProcess).ClientsLock.Lock()
-					defer value.(*managedProcess).ClientsLock.Unlock()
-					for username, ws := range value.(*managedProcess).Clients {
+				if value, loaded := connector.Processes.LoadAndDelete(key); loaded { // Yes, this is safe.
+					value.KillProcess() // Other goroutines will cleanup.
+					value.Clients.Range(func(key string, ws chan []byte) bool {
 						ws <- nil
-						delete(value.(*managedProcess).Clients, username)
-					}
+						return true
+					})
+					value.Clients.Clear()
 				}
 			}
 			return true
@@ -268,8 +238,8 @@ func (connector *Connector) registerMiscRoutes() {
 		}
 		// Get a map of processes and their online status.
 		processes := make(map[string]int)
-		connector.Processes.Range(func(k, v interface{}) bool {
-			processes[v.(*managedProcess).Name] = v.(*managedProcess).Online
+		connector.Processes.Range(func(k string, v *managedProcess) bool {
+			processes[v.Name] = v.Online
 			return true
 		})
 		// Send the list.
@@ -293,7 +263,7 @@ func (connector *Connector) registerMiscRoutes() {
 		}
 		// Get the process being accessed.
 		id := mux.Vars(r)["id"]
-		process, err := connector.Processes.Get(id)
+		process, err := connector.Processes.Load(id)
 		// In case the process doesn't exist.
 		if !err {
 			httpError(w, "This server does not exist!", http.StatusNotFound)
@@ -377,20 +347,18 @@ func (connector *Connector) registerMiscRoutes() {
 	connector.Upgrader.CheckOrigin = func(r *http.Request) bool { return true }
 	connector.Router.HandleFunc("/server/{id}/console", func(w http.ResponseWriter, r *http.Request) {
 		// Check with authenticator.
-		t, e := connector.GetTicket(r.URL.Query().Get("ticket"))
-		if e && t.IPAddr == GetIP(r) {
-			connector.DeleteTicket(r.URL.Query().Get("ticket"))
-		} else if connector.Validate(w, r) == "" {
+		ticket, ticketExists := connector.Tickets.LoadAndDelete(r.URL.Query().Get("ticket"))
+		if !(ticketExists && ticket.IPAddr == GetIP(r)) && connector.Validate(w, r) == "" {
 			return
 		}
 		// Retrieve the token.
 		token := auth.GetTokenFromRequest(r)
-		if e {
-			token = t.Token
+		if ticketExists {
+			token = ticket.Token
 		}
 		// Get the server being accessed.
 		id := mux.Vars(r)["id"]
-		process, exists := connector.Processes.Get(id)
+		process, exists := connector.Processes.Load(id)
 		// In case the server doesn't exist.
 		if !exists {
 			httpError(w, "This server does not exist!", http.StatusNotFound)
@@ -439,19 +407,11 @@ func (connector *Connector) registerMiscRoutes() {
 				process.ConsoleLock.RLock()
 				defer process.ConsoleLock.RUnlock()
 				writeToWs <- []byte(process.Console)
-
-				process.ClientsLock.Lock()
-				defer process.ClientsLock.Unlock()
-				process.Clients[token] = writeToWs
+				process.Clients.Store(token, writeToWs)
 			})()
 			// Read messages from the user and execute them.
 			for {
-				var client chan []byte
-				(func() { // Use inline function to be able to defer.
-					process.ClientsLock.RLock()
-					defer process.ClientsLock.RUnlock()
-					client = process.Clients[token]
-				})()
+				client, _ := process.Clients.Load(token)
 				// Another client has connected with the same token. Terminate existing connection.
 				if client != writeToWs {
 					break
@@ -459,9 +419,7 @@ func (connector *Connector) registerMiscRoutes() {
 				// Read messages from the user.
 				_, message, err := c.ReadMessage()
 				if err != nil {
-					process.ClientsLock.Lock()
-					defer process.ClientsLock.Unlock()
-					delete(process.Clients, token)
+					process.Clients.Delete(token)
 					break // The WebSocket connection has terminated.
 				}
 				if v2 {

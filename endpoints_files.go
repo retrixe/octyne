@@ -43,7 +43,7 @@ func (connector *Connector) registerFileRoutes() {
 		}
 		// Get the process being accessed.
 		id := mux.Vars(r)["id"]
-		process, err := connector.Processes.Get(id)
+		process, err := connector.Processes.Load(id)
 		// In case the process doesn't exist.
 		if !err {
 			httpError(w, "This server does not exist!", http.StatusNotFound)
@@ -107,14 +107,14 @@ func (connector *Connector) registerFileRoutes() {
 	// DELETE /server/{id}/file?path=path
 	// PATCH /server/{id}/file?path=path
 	connector.Router.HandleFunc("/server/{id}/file", func(w http.ResponseWriter, r *http.Request) {
-		if t, e := connector.GetTicket(r.URL.Query().Get("ticket")); e && r.Method == "GET" && t.IPAddr == GetIP(r) {
-			connector.DeleteTicket(r.URL.Query().Get("ticket"))
-		} else if connector.Validate(w, r) == "" {
+		ticket, ticketExists := connector.Tickets.LoadAndDelete(r.URL.Query().Get("ticket"))
+		if !(ticketExists && r.Method == "GET" && ticket.IPAddr == GetIP(r)) &&
+			connector.Validate(w, r) == "" {
 			return
 		}
 		// Get the process being accessed.
 		id := mux.Vars(r)["id"]
-		process, err := connector.Processes.Get(id)
+		process, err := connector.Processes.Load(id)
 		// In case the process doesn't exist.
 		if !err {
 			httpError(w, "This server does not exist!", http.StatusNotFound)
@@ -303,7 +303,7 @@ func (connector *Connector) registerFileRoutes() {
 		}
 		// Get the process being accessed.
 		id := mux.Vars(r)["id"]
-		process, err := connector.Processes.Get(id)
+		process, err := connector.Processes.Load(id)
 		// In case the process doesn't exist.
 		if !err {
 			httpError(w, "This server does not exist!", http.StatusNotFound)
@@ -345,7 +345,7 @@ func (connector *Connector) registerFileRoutes() {
 		}
 		// Get the process being accessed.
 		id := mux.Vars(r)["id"]
-		process, err := connector.Processes.Get(id)
+		process, err := connector.Processes.Load(id)
 		// In case the process doesn't exist.
 		if !err {
 			httpError(w, "This server does not exist!", http.StatusNotFound)
@@ -429,7 +429,7 @@ func (connector *Connector) registerFileRoutes() {
 		}
 		// Get the process being accessed.
 		id := mux.Vars(r)["id"]
-		process, err := connector.Processes.Get(id)
+		process, err := connector.Processes.Load(id)
 		// In case the process doesn't exist.
 		if !err {
 			httpError(w, "This server does not exist!", http.StatusNotFound)

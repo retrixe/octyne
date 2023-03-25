@@ -8,3 +8,5 @@ require (
 	github.com/gorilla/mux v1.7.4
 	github.com/gorilla/websocket v1.4.2
 )
+
+require github.com/puzpuzpuz/xsync/v2 v2.4.0

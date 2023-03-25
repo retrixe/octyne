@@ -2,21 +2,18 @@ package auth
 
 import (
 	"net/http"
-	"sync"
+
+	"github.com/puzpuzpuz/xsync/v2"
 )
 
 // MemoryAuthenticator is an Authenticator implementation using an array to store tokens.
 type MemoryAuthenticator struct {
-	TokenMutex sync.RWMutex
-	Tokens     map[string]string
+	Tokens *xsync.MapOf[string, string]
 }
 
 // NewMemoryAuthenticator initializes an authenticator using memory for token storage.
 func NewMemoryAuthenticator() Authenticator {
-	// Create the authenticator.
-	return &MemoryAuthenticator{
-		Tokens: make(map[string]string),
-	}
+	return &MemoryAuthenticator{Tokens: xsync.NewMapOf[string]()}
 }
 
 // Validate is called on an HTTP API request and checks whether or not the user is authenticated.
@@ -28,9 +25,7 @@ func (a *MemoryAuthenticator) Validate(w http.ResponseWriter, r *http.Request) s
 		return ""
 	}
 	// If valid, return true.
-	a.TokenMutex.RLock()
-	defer a.TokenMutex.RUnlock()
-	username, ok := a.Tokens[token]
+	username, ok := a.Tokens.Load(token)
 	if ok {
 		return username
 	}
@@ -45,9 +40,7 @@ func (a *MemoryAuthenticator) Login(username string, password string) string {
 	if token == "" {
 		return ""
 	}
-	a.TokenMutex.Lock()
-	defer a.TokenMutex.Unlock()
-	a.Tokens[token] = username
+	a.Tokens.Store(token, username)
 	return token
 }
 
@@ -56,10 +49,7 @@ func (a *MemoryAuthenticator) Logout(token string) bool {
 	if !isValidToken(token) {
 		return false
 	}
-	a.TokenMutex.Lock()
-	defer a.TokenMutex.Unlock()
-	tokenExisted := a.Tokens[token] != ""
-	delete(a.Tokens, token)
+	_, tokenExisted := a.Tokens.LoadAndDelete(token)
 	return tokenExisted
 }
 

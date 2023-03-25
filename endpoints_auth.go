@@ -90,19 +90,15 @@ func (connector *Connector) registerAuthRoutes() {
 		ticket := make([]byte, 4)
 		rand.Read(ticket) // Tolerate errors here, an error here is incredibly unlikely: skipcq GSC-G104
 		ticketString := base64.StdEncoding.EncodeToString(ticket)
-		(func() {
-			connector.TicketsLock.Lock()
-			defer connector.TicketsLock.Unlock()
-			connector.Tickets[ticketString] = Ticket{
-				Time:   time.Now().Unix(),
-				Token:  token,
-				IPAddr: GetIP(r),
-			}
-		})()
+		connector.Tickets.Store(ticketString, Ticket{
+			Time:   time.Now().Unix(),
+			Token:  token,
+			IPAddr: GetIP(r),
+		})
 		// Schedule deletion (cancellable).
 		go (func() {
 			<-time.After(2 * time.Minute)
-			connector.DeleteTicket(ticketString)
+			connector.Tickets.Delete(ticketString)
 		})()
 		// Send the response.
 		fmt.Fprintln(w, "{\"ticket\": \""+ticketString+"\"}")
