@@ -240,7 +240,7 @@ func (connector *Connector) registerMiscRoutes() {
 				value.(*managedProcess).Process.ServerConfig = serverConfig
 			} else {
 				if value, loaded := connector.Processes.LoadAndDelete(key.(string)); loaded { // Yes, this is safe.
-					value.(*managedProcess).StopProcess() // Other goroutines will cleanup.
+					value.(*managedProcess).KillProcess() // Other goroutines will cleanup.
 					value.(*managedProcess).ClientsLock.Lock()
 					defer value.(*managedProcess).ClientsLock.Unlock()
 					for username, ws := range value.(*managedProcess).Clients {
@@ -319,10 +319,15 @@ func (connector *Connector) registerMiscRoutes() {
 				res := make(map[string]bool)
 				res["success"] = err == nil
 				json.NewEncoder(w).Encode(res) // skipcq GSC-G104
-			} else if operation == "STOP" {
+			} else if operation == "STOP" || operation == "KILL" || operation == "TERM" {
 				// Stop process if required.
 				if process.Online == 1 {
-					process.StopProcess()
+					// Octyne 2.x should drop STOP or move it to SIGTERM.
+					if operation == "KILL" || operation == "STOP" {
+						process.KillProcess()
+					} else {
+						process.StopProcess()
+					}
 				}
 				// Send a response.
 				res := make(map[string]bool)

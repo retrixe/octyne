@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -87,15 +88,24 @@ func (process *Process) StartProcess() error {
 	return err
 }
 
-// StopProcess stops the process.
+// StopProcess stops the process with SIGTERM.
 func (process *Process) StopProcess() {
 	info.Println("Stopping server " + process.Name)
 	process.SendConsoleOutput("[Octyne] Stopping server " + process.Name)
 	command := process.Command
-	// Stop the command.
+	// SIGTERM works with: Java, Node, npm, yarn v1, yarn v2, PaperMC, Velocity, BungeeCord, Waterfall
+	// SIGINT fails with yarn v1 and v2, hence is not used.
+	command.Process.Signal(syscall.SIGTERM)
+	process.Online = 0
+}
+
+// KillProcess stops the process.
+func (process *Process) KillProcess() {
+	info.Println("Killing server " + process.Name)
+	process.SendConsoleOutput("[Octyne] Killing server " + process.Name)
+	command := process.Command
 	command.Process.Kill()
 	process.Online = 0
-	// process.SendConsoleOutput("[Octyne] Stopped server " + process.Name)
 }
 
 // SendCommand sends an input to stdin of the process.
@@ -122,7 +132,10 @@ func (process *Process) MonitorProcess() error {
 	// Wait for the command to finish execution.
 	err := process.Command.Wait()
 	// Mark as offline appropriately.
-	if process.Command.ProcessState.Success() || process.Online == 0 {
+	if process.Command.ProcessState.Success() ||
+		process.Online == 0 /* SIGKILL (if done by Octyne) */ ||
+		process.Command.ProcessState.ExitCode() == 130 /* SIGINT */ ||
+		process.Command.ProcessState.ExitCode() == 143 /* SIGTERM */ {
 		process.Online = 0
 		process.Uptime = 0
 		process.Crashes = 0
