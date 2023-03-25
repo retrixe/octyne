@@ -38,7 +38,7 @@ func (connector *Connector) registerFileRoutes() {
 	}
 	connector.Router.HandleFunc("/server/{id}/files", func(w http.ResponseWriter, r *http.Request) {
 		// Check with authenticator.
-		if !connector.Validate(w, r) {
+		if connector.Validate(w, r) == "" {
 			return
 		}
 		// Get the process being accessed.
@@ -109,7 +109,7 @@ func (connector *Connector) registerFileRoutes() {
 	connector.Router.HandleFunc("/server/{id}/file", func(w http.ResponseWriter, r *http.Request) {
 		if t, e := connector.GetTicket(r.URL.Query().Get("ticket")); e && r.Method == "GET" && t.IPAddr == GetIP(r) {
 			connector.DeleteTicket(r.URL.Query().Get("ticket"))
-		} else if !connector.Validate(w, r) {
+		} else if connector.Validate(w, r) == "" {
 			return
 		}
 		// Get the process being accessed.
@@ -298,7 +298,7 @@ func (connector *Connector) registerFileRoutes() {
 	// POST /server/{id}/folder?path=path
 	connector.Router.HandleFunc("/server/{id}/folder", func(w http.ResponseWriter, r *http.Request) {
 		// Check with authenticator.
-		if !connector.Validate(w, r) {
+		if connector.Validate(w, r) == "" {
 			return
 		}
 		// Get the process being accessed.
@@ -340,7 +340,7 @@ func (connector *Connector) registerFileRoutes() {
 	// POST /server/{id}/compress?path=path&compress=true/false (compress is optional, default: true)
 	connector.Router.HandleFunc("/server/{id}/compress", func(w http.ResponseWriter, r *http.Request) {
 		// Check with authenticator.
-		if !connector.Validate(w, r) {
+		if connector.Validate(w, r) == "" {
 			return
 		}
 		// Get the process being accessed.
@@ -424,7 +424,7 @@ func (connector *Connector) registerFileRoutes() {
 	// POST /server/{id}/decompress?path=path
 	connector.Router.HandleFunc("/server/{id}/decompress", func(w http.ResponseWriter, r *http.Request) {
 		// Check with authenticator.
-		if !connector.Validate(w, r) {
+		if connector.Validate(w, r) == "" {
 			return
 		}
 		// Get the process being accessed.

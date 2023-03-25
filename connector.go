@@ -194,7 +194,7 @@ func (connector *Connector) registerMiscRoutes() {
 	// GET /config/reload
 	connector.Router.HandleFunc("/config/reload", func(w http.ResponseWriter, r *http.Request) {
 		// Check with authenticator.
-		if !connector.Validate(w, r) {
+		if connector.Validate(w, r) == "" {
 			return
 		}
 		// Read the new config.
@@ -263,7 +263,7 @@ func (connector *Connector) registerMiscRoutes() {
 	}
 	connector.Router.HandleFunc("/servers", func(w http.ResponseWriter, r *http.Request) {
 		// Check with authenticator.
-		if !connector.Validate(w, r) {
+		if connector.Validate(w, r) == "" {
 			return
 		}
 		// Get a map of processes and their online status.
@@ -288,7 +288,7 @@ func (connector *Connector) registerMiscRoutes() {
 	totalMemory := int64(system.GetTotalSystemMemory())
 	connector.Router.HandleFunc("/server/{id}", func(w http.ResponseWriter, r *http.Request) {
 		// Check with authenticator.
-		if !connector.Validate(w, r) {
+		if connector.Validate(w, r) == "" {
 			return
 		}
 		// Get the process being accessed.
@@ -380,7 +380,7 @@ func (connector *Connector) registerMiscRoutes() {
 		t, e := connector.GetTicket(r.URL.Query().Get("ticket"))
 		if e && t.IPAddr == GetIP(r) {
 			connector.DeleteTicket(r.URL.Query().Get("ticket"))
-		} else if !connector.Validate(w, r) {
+		} else if connector.Validate(w, r) == "" {
 			return
 		}
 		// Retrieve the token.

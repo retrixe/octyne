@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"errors"
 	"log"
 	"net/http"
 	"time"
@@ -32,27 +33,26 @@ func NewRedisAuthenticator(url string) *RedisAuthenticator {
 }
 
 // Validate is called on an HTTP API request and checks whether or not the user is authenticated.
-func (a *RedisAuthenticator) Validate(w http.ResponseWriter, r *http.Request) bool {
+func (a *RedisAuthenticator) Validate(w http.ResponseWriter, r *http.Request) string {
 	token := GetTokenFromRequest(r)
 	if !isValidToken(token) {
 		http.Error(w, "{\"error\": \"You are not authenticated to access this resource!\"}",
 			http.StatusUnauthorized)
-		return false
+		return ""
 	}
 	// Make request to Redis database.
 	conn := a.Redis.Get()
 	defer conn.Close()
-	res, err := redis.Int(conn.Do("EXISTS", "octyne-token:"+token))
-	if err != nil {
-		log.Println("An error occurred while making a request to Redis!", err) // skipcq: GO-S0904
-		http.Error(w, "{\"error\": \"Internal Server Error!\"}", http.StatusInternalServerError)
-		return false
-	}
-	if res != 1 {
+	res, err := redis.String(conn.Do("GET", "octyne-token:"+token))
+	if errors.Is(err, redis.ErrNil) {
 		http.Error(w, "{\"error\": \"You are not authenticated to access this resource!\"}",
 			http.StatusUnauthorized)
+	} else if err != nil {
+		log.Println("An error occurred while making a request to Redis!", err) // skipcq: GO-S0904
+		http.Error(w, "{\"error\": \"Internal Server Error!\"}", http.StatusInternalServerError)
+		return ""
 	}
-	return res == 1
+	return res
 }
 
 // Login allows logging in a user and returning the token.

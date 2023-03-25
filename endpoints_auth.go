@@ -56,7 +56,7 @@ func (connector *Connector) registerAuthRoutes() {
 	// GET /logout
 	connector.Router.HandleFunc("/logout", func(w http.ResponseWriter, r *http.Request) {
 		// Check with authenticator.
-		if !connector.Validate(w, r) {
+		if connector.Validate(w, r) == "" {
 			return
 		}
 		token := auth.GetTokenFromRequest(r)
@@ -82,7 +82,7 @@ func (connector *Connector) registerAuthRoutes() {
 	// GET /ott
 	connector.Router.HandleFunc("/ott", func(w http.ResponseWriter, r *http.Request) {
 		// Check with authenticator.
-		if !connector.Validate(w, r) {
+		if connector.Validate(w, r) == "" {
 			return
 		}
 		token := auth.GetTokenFromRequest(r)
@@ -116,7 +116,7 @@ func (connector *Connector) registerAuthRoutes() {
 		Password string `json:"password"`
 	}
 	connector.Router.HandleFunc("/accounts", func(w http.ResponseWriter, r *http.Request) {
-		if !connector.Validate(w, r) {
+		if connector.Validate(w, r) == "" {
 			return
 		} else if r.Method != "POST" && r.Method != "PATCH" && r.Method != "DELETE" {
 			httpError(w, "Only POST, PATCH and DELETE are allowed!", http.StatusMethodNotAllowed)

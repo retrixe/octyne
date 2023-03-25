@@ -20,23 +20,23 @@ func NewMemoryAuthenticator() Authenticator {
 }
 
 // Validate is called on an HTTP API request and checks whether or not the user is authenticated.
-func (a *MemoryAuthenticator) Validate(w http.ResponseWriter, r *http.Request) bool {
+func (a *MemoryAuthenticator) Validate(w http.ResponseWriter, r *http.Request) string {
 	token := GetTokenFromRequest(r)
 	if !isValidToken(token) {
 		http.Error(w, "{\"error\": \"You are not authenticated to access this resource!\"}",
 			http.StatusUnauthorized)
-		return false
+		return ""
 	}
 	// If valid, return true.
 	a.TokenMutex.RLock()
 	defer a.TokenMutex.RUnlock()
-	_, ok := a.Tokens[token]
+	username, ok := a.Tokens[token]
 	if ok {
-		return true
+		return username
 	}
 	http.Error(w, "{\"error\": \"You are not authenticated to access this resource!\"}",
 		http.StatusUnauthorized)
-	return false
+	return ""
 }
 
 // Login allows logging in a user and returning the token.

@@ -14,8 +14,8 @@ import (
 
 // Authenticator is used by Octyne's Connector to provide HTTP API authentication.
 type Authenticator interface {
-	// Validate is called on an HTTP API request and checks whether or not the user is authenticated.
-	Validate(w http.ResponseWriter, r *http.Request) bool
+	// Validate is called on an HTTP API request and returns the user's name if request is authenticated.
+	Validate(w http.ResponseWriter, r *http.Request) string
 	// Login allows logging in a user and returning the token.
 	Login(username string, password string) string
 	// Logout allows logging out of a user and deleting the token from the server.
@@ -32,7 +32,7 @@ type ReplaceableAuthenticator struct {
 }
 
 // Validate is called on an HTTP API request and checks whether or not the user is authenticated.
-func (a *ReplaceableAuthenticator) Validate(w http.ResponseWriter, r *http.Request) bool {
+func (a *ReplaceableAuthenticator) Validate(w http.ResponseWriter, r *http.Request) string {
 	a.EngineMutex.RLock()
 	defer a.EngineMutex.RUnlock()
 	return a.Engine.Validate(w, r)
