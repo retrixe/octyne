@@ -11,6 +11,27 @@ type Config struct {
 	Servers map[string]ServerConfig `json:"servers"`
 }
 
+var defaultConfig = Config{
+	Port: 42069,
+	Logging: LoggingConfig{
+		Enabled: true,
+		Path:    "logs",
+		Actions: map[string]bool{
+			"server.getStats":   false,
+			"server.files.list": false,
+		},
+	},
+}
+
+// UnmarshalJSON unmarshals Config and sets default values.
+func (c *Config) UnmarshalJSON(data []byte) error {
+	type alias Config // Prevent recursive calls to UnmarshalJSON.
+	conf := alias(defaultConfig)
+	err := json.Unmarshal(data, &conf)
+	*c = Config(conf)
+	return err
+}
+
 // RedisConfig contains whether or not Redis is enabled, and if so, how to connect.
 type RedisConfig struct {
 	Enabled bool   `json:"enabled"`
@@ -31,12 +52,12 @@ type ServerConfig struct {
 	Command   string `json:"command"`
 }
 
-// UnmarshalJSON unmarshals ServerConfig and sets default value for the Enabled property.
+// UnmarshalJSON unmarshals ServerConfig and sets default values.
 func (c *ServerConfig) UnmarshalJSON(data []byte) error {
 	type alias ServerConfig // Prevent recursive calls to UnmarshalJSON.
-	conf := &alias{Enabled: true}
-	err := json.Unmarshal(data, conf)
-	*c = ServerConfig(*conf)
+	conf := alias{Enabled: true}
+	err := json.Unmarshal(data, &conf)
+	*c = ServerConfig(conf)
 	return err
 }
 
@@ -50,13 +71,9 @@ type LoggingConfig struct {
 // UnmarshalJSON unmarshals LoggingConfig and sets default values.
 func (c *LoggingConfig) UnmarshalJSON(data []byte) error {
 	type alias LoggingConfig // Prevent recursive calls to UnmarshalJSON.
-	conf := &alias{Enabled: true, Path: "logs"}
-	conf.Actions = map[string]bool{
-		"server.getStats":   false,
-		"server.files.list": false,
-	}
-	err := json.Unmarshal(data, conf)
-	*c = LoggingConfig(*conf)
+	conf := alias(defaultConfig.Logging)
+	err := json.Unmarshal(data, &conf)
+	*c = LoggingConfig(conf)
 	return err
 }
 

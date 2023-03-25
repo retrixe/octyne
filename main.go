@@ -5,10 +5,14 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
 	"github.com/gorilla/handlers"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 // OctyneVersion is the last version of Octyne this code is based on.
@@ -22,15 +26,13 @@ func getPort(config *Config) string {
 }
 
 var info *log.Logger
+var logger *zap.Logger
 
 func main() {
 	if len(os.Args) >= 2 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
 		println("octyne version " + OctyneVersion)
 		return
 	}
-	log.SetOutput(os.Stderr)
-	log.SetPrefix("[Octyne] ")
-	info = log.New(os.Stdout, "[Octyne] ", log.Flags())
 
 	// Read config.
 	var config Config
@@ -42,6 +44,27 @@ func main() {
 	if err != nil {
 		panic("An error occurred while attempting to read config! " + err.Error())
 	}
+
+	// Setup logging.
+	log.SetOutput(os.Stderr)
+	log.SetPrefix("[Octyne] ")
+	info = log.New(os.Stdout, "[Octyne] ", log.Flags())
+	var w zapcore.WriteSyncer
+	if config.Logging.Enabled {
+		w = zapcore.AddSync(&lumberjack.Logger{
+			Filename: filepath.Join(config.Logging.Path, "octyne.log"),
+			MaxSize:  1, // megabytes
+		})
+	} else {
+		w = zapcore.AddSync(nil)
+	}
+	core := zapcore.NewCore(
+		zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()),
+		w,
+		zap.InfoLevel,
+	)
+	logger = zap.New(core)
+	defer logger.Sync()
 
 	// Get a slice of server names.
 	servers := make([]string, 0, len(config.Servers))
