@@ -246,7 +246,7 @@ func (connector *Connector) registerMiscRoutes() {
 		})
 		// TODO: Reload HTTP server, mark server for deletion instead of instantly deleting them.
 		// Send the response.
-		connector.Info("config.reload", "ip", r.RemoteAddr, "user", user)
+		connector.Info("config.reload", "ip", GetIP(r), "user", user)
 		fmt.Fprintln(w, "{\"success\":true}")
 		info.Println("Config reloaded successfully!")
 	})
@@ -309,7 +309,7 @@ func (connector *Connector) registerMiscRoutes() {
 				// Start process if required.
 				if process.Online != 1 {
 					err = process.StartProcess()
-					connector.Info("server.start", "ip", r.RemoteAddr, "user", user, "server", id)
+					connector.Info("server.start", "ip", GetIP(r), "user", user, "server", id)
 				}
 				// Send a response.
 				res := make(map[string]bool)
@@ -321,10 +321,10 @@ func (connector *Connector) registerMiscRoutes() {
 					// Octyne 2.x should drop STOP or move it to SIGTERM.
 					if operation == "KILL" || operation == "STOP" {
 						process.KillProcess()
-						connector.Info("server.kill", "ip", r.RemoteAddr, "user", user, "server", id)
+						connector.Info("server.kill", "ip", GetIP(r), "user", user, "server", id)
 					} else {
 						process.StopProcess()
-						connector.Info("server.stop", "ip", r.RemoteAddr, "user", user, "server", id)
+						connector.Info("server.stop", "ip", GetIP(r), "user", user, "server", id)
 					}
 				}
 				// Send a response.
@@ -399,7 +399,7 @@ func (connector *Connector) registerMiscRoutes() {
 		c, err := connector.Upgrade(w, r, nil)
 		v2 := c.Subprotocol() == "console-v2"
 		if err == nil {
-			connector.Info("server.console.access", "ip", r.RemoteAddr, "user", user, "server", id)
+			connector.Info("server.console.access", "ip", GetIP(r), "user", user, "server", id)
 			defer c.Close()
 			// Setup deadlines.
 			limit := 30 * time.Second
@@ -459,7 +459,7 @@ func (connector *Connector) registerMiscRoutes() {
 					err := json.Unmarshal(message, &data)
 					if err == nil {
 						if data["type"] == "input" && data["data"] != "" {
-							connector.Info("server.console.input", "ip", r.RemoteAddr, "user", user, "server", id)
+							connector.Info("server.console.input", "ip", GetIP(r), "user", user, "server", id)
 							process.SendCommand(data["data"])
 						} else if data["type"] == "ping" {
 							c.WriteJSON(struct { // skipcq GSC-G104
@@ -479,7 +479,7 @@ func (connector *Connector) registerMiscRoutes() {
 						}{"error", "Invalid message format"})
 					}
 				} else {
-					connector.Info("server.console.input", "ip", r.RemoteAddr, "user", user, "server", id)
+					connector.Info("server.console.input", "ip", GetIP(r), "user", user, "server", id)
 					process.SendCommand(string(message))
 				}
 			}

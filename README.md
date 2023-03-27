@@ -47,7 +47,7 @@ Used to configure the apps Octyne should start, Redis-based authentication for a
   "logging": {
     "enabled": true, // whether Octyne should log actions
     "path": "logs", // path to log files, can be relative or absolute
-    "actions": {} // optional, see the logging section below for info
+    "actions": {} // optional, disable logging for specific actions, more info below
   },
   "servers": {
     "test1": { // each key has the name of the server
@@ -71,7 +71,9 @@ Contains users who can log into Octyne. Use a secure method to hash your passwor
 
 ### Logging
 
-By default, Octyne will log all actions performed by users. You can enable/disable logging for [specific actions](#actions) by setting the value of the action to `true` or `false` in the `logging.actions` object. For example, to disable logging for the `auth.login` and `auth.logout` actions:
+**Note: Fine-grained control over logging is an *experimental* feature. Hence, the names for actions may change in any version, not just major versions. However, we will generally try to avoid this.**
+
+By default, Octyne will log all actions performed by users. You can enable/disable logging for specific actions by setting the value of the action to `true`/`false` in the `logging.actions` object. For example, to disable logging for `auth.login` and `auth.logout`:
 
 ```json
 "actions": {
@@ -80,11 +82,9 @@ By default, Octyne will log all actions performed by users. You can enable/disab
 }
 ```
 
-### Actions
-
 - Authentication (`auth`): `login`, `logout`
 - Configuration (`config`): `reload`
-- Account management (`accounts`): `create`, `edit`, `delete`
+- Account management (`accounts`): `create`, `update`, `delete`
 - Server management (`server`):
   - Top-level actions: `start`, `stop`, `kill`
   - Console (`server.console`): `access`, `input`

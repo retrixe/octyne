@@ -34,7 +34,7 @@ func (connector *Connector) registerAuthRoutes() {
 			httpError(w, "Invalid username or password!", http.StatusUnauthorized)
 			return
 		}
-		connector.Info("auth.login", "ip", r.RemoteAddr, "user", username)
+		connector.Info("auth.login", "ip", GetIP(r), "user", username)
 		// Set the authentication cookie, if requested.
 		if r.URL.Query().Get("cookie") == "true" {
 			http.SetCookie(w, &http.Cookie{
@@ -78,7 +78,7 @@ func (connector *Connector) registerAuthRoutes() {
 			SameSite: http.SameSiteStrictMode,
 		})
 		// Send the response.
-		connector.Info("auth.logout", "ip", r.RemoteAddr, "user", user)
+		connector.Info("auth.logout", "ip", GetIP(r), "user", user)
 		fmt.Fprintln(w, "{\"success\":true}")
 	})
 
@@ -117,7 +117,8 @@ func (connector *Connector) registerAuthRoutes() {
 		Password string `json:"password"`
 	}
 	connector.Router.HandleFunc("/accounts", func(w http.ResponseWriter, r *http.Request) {
-		if connector.Validate(w, r) == "" {
+		user := connector.Validate(w, r)
+		if user == "" {
 			return
 		} else if r.Method != "POST" && r.Method != "PATCH" && r.Method != "DELETE" {
 			httpError(w, "Only POST, PATCH and DELETE are allowed!", http.StatusMethodNotAllowed)
@@ -159,6 +160,11 @@ func (connector *Connector) registerAuthRoutes() {
 				return
 			}
 			sha256sum := fmt.Sprintf("%x", sha256.Sum256([]byte(body.Password)))
+			if r.Method == "POST" {
+				connector.Info("accounts.create", "ip", GetIP(r), "user", user, "newUser", body.Username)
+			} else {
+				connector.Info("accounts.update", "ip", GetIP(r), "user", user, "updatedUser", body.Username)
+			}
 			users[body.Username] = sha256sum
 		} else if r.Method == "DELETE" {
 			username := r.URL.Query().Get("username")
@@ -169,6 +175,7 @@ func (connector *Connector) registerAuthRoutes() {
 				httpError(w, "User does not exist!", http.StatusNotFound)
 				return
 			}
+			connector.Info("accounts.delete", "ip", GetIP(r), "user", user, "deletedUser", username)
 			delete(users, username)
 		}
 		usersJson, err := json.MarshalIndent(users, "", "  ")
