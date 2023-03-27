@@ -19,6 +19,21 @@ import (
 	"github.com/retrixe/octyne/system"
 )
 
+// Logger handles file logging to zapLogger.
+type Logger struct {
+	LoggingConfig
+	Lock sync.RWMutex
+}
+
+// Info calls the underlying zap.Logger if the action should be logged.
+func (l *Logger) Info(action string, args ...interface{}) {
+	l.Lock.RLock()
+	defer l.Lock.RUnlock()
+	if l.ShouldLog(action) {
+		logger.Sugar().Info("action", action, args)
+	}
+}
+
 // An internal representation of Process along with the clients connected to it and its output.
 type managedProcess struct {
 	*Process
@@ -30,6 +45,7 @@ type managedProcess struct {
 // Ticket is a one-time ticket usable by browsers to quickly authenticate with the WebSocket API.
 type Ticket struct {
 	Time   int64
+	User   string
 	Token  string
 	IPAddr string
 }
@@ -39,6 +55,7 @@ type Connector struct {
 	auth.Authenticator
 	*mux.Router
 	*websocket.Upgrader
+	*Logger
 	Processes *xsync.MapOf[string, *managedProcess]
 	Tickets   *xsync.MapOf[string, Ticket]
 }
@@ -67,6 +84,7 @@ func InitializeConnector(config *Config) *Connector {
 	// Create the connector.
 	connector := &Connector{
 		Router:        mux.NewRouter().StrictSlash(true),
+		Logger:        &Logger{LoggingConfig: config.Logging},
 		Processes:     xsync.NewMapOf[*managedProcess](),
 		Tickets:       xsync.NewMapOf[Ticket](),
 		Authenticator: &auth.ReplaceableAuthenticator{Engine: authenticator},
@@ -165,7 +183,8 @@ func (connector *Connector) registerMiscRoutes() {
 	// GET /config/reload
 	connector.Router.HandleFunc("/config/reload", func(w http.ResponseWriter, r *http.Request) {
 		// Check with authenticator.
-		if connector.Validate(w, r) == "" {
+		user := connector.Validate(w, r)
+		if user == "" {
 			return
 		}
 		// Read the new config.
@@ -182,6 +201,10 @@ func (connector *Connector) registerMiscRoutes() {
 			httpError(w, "An error occurred while parsing config!", http.StatusInternalServerError)
 			return
 		}
+		// Update logged actions.
+		connector.Logger.Lock.Lock()
+		defer connector.Logger.Lock.Unlock()
+		connector.Logger.LoggingConfig = config.Logging
 		// Replace authenticator if changed. We are guaranteed that Authenticator is Replaceable.
 		replaceableAuthenticator := connector.Authenticator.(*auth.ReplaceableAuthenticator)
 		replaceableAuthenticator.EngineMutex.Lock()
@@ -223,6 +246,7 @@ func (connector *Connector) registerMiscRoutes() {
 		})
 		// TODO: Reload HTTP server, mark server for deletion instead of instantly deleting them.
 		// Send the response.
+		connector.Info("config.reload", "ip", r.RemoteAddr, "user", user)
 		fmt.Fprintln(w, "{\"success\":true}")
 		info.Println("Config reloaded successfully!")
 	})
@@ -258,7 +282,8 @@ func (connector *Connector) registerMiscRoutes() {
 	totalMemory := int64(system.GetTotalSystemMemory())
 	connector.Router.HandleFunc("/server/{id}", func(w http.ResponseWriter, r *http.Request) {
 		// Check with authenticator.
-		if connector.Validate(w, r) == "" {
+		user := connector.Validate(w, r)
+		if user == "" {
 			return
 		}
 		// Get the process being accessed.
@@ -284,6 +309,7 @@ func (connector *Connector) registerMiscRoutes() {
 				// Start process if required.
 				if process.Online != 1 {
 					err = process.StartProcess()
+					connector.Info("server.start", "ip", r.RemoteAddr, "user", user, "server", id)
 				}
 				// Send a response.
 				res := make(map[string]bool)
@@ -295,8 +321,10 @@ func (connector *Connector) registerMiscRoutes() {
 					// Octyne 2.x should drop STOP or move it to SIGTERM.
 					if operation == "KILL" || operation == "STOP" {
 						process.KillProcess()
+						connector.Info("server.kill", "ip", r.RemoteAddr, "user", user, "server", id)
 					} else {
 						process.StopProcess()
+						connector.Info("server.stop", "ip", r.RemoteAddr, "user", user, "server", id)
 					}
 				}
 				// Send a response.
@@ -348,7 +376,10 @@ func (connector *Connector) registerMiscRoutes() {
 	connector.Router.HandleFunc("/server/{id}/console", func(w http.ResponseWriter, r *http.Request) {
 		// Check with authenticator.
 		ticket, ticketExists := connector.Tickets.LoadAndDelete(r.URL.Query().Get("ticket"))
-		if !(ticketExists && ticket.IPAddr == GetIP(r)) && connector.Validate(w, r) == "" {
+		user := ""
+		if ticketExists && ticket.IPAddr == GetIP(r) {
+			user = ticket.User
+		} else if user = connector.Validate(w, r); user == "" {
 			return
 		}
 		// Retrieve the token.
@@ -368,6 +399,7 @@ func (connector *Connector) registerMiscRoutes() {
 		c, err := connector.Upgrade(w, r, nil)
 		v2 := c.Subprotocol() == "console-v2"
 		if err == nil {
+			connector.Info("server.console.access", "ip", r.RemoteAddr, "user", user, "server", id)
 			defer c.Close()
 			// Setup deadlines.
 			limit := 30 * time.Second
@@ -427,6 +459,7 @@ func (connector *Connector) registerMiscRoutes() {
 					err := json.Unmarshal(message, &data)
 					if err == nil {
 						if data["type"] == "input" && data["data"] != "" {
+							connector.Info("server.console.input", "ip", r.RemoteAddr, "user", user, "server", id)
 							process.SendCommand(data["data"])
 						} else if data["type"] == "ping" {
 							c.WriteJSON(struct { // skipcq GSC-G104
@@ -446,6 +479,7 @@ func (connector *Connector) registerMiscRoutes() {
 						}{"error", "Invalid message format"})
 					}
 				} else {
+					connector.Info("server.console.input", "ip", r.RemoteAddr, "user", user, "server", id)
 					process.SendCommand(string(message))
 				}
 			}

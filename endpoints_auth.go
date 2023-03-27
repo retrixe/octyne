@@ -34,6 +34,7 @@ func (connector *Connector) registerAuthRoutes() {
 			httpError(w, "Invalid username or password!", http.StatusUnauthorized)
 			return
 		}
+		connector.Info("auth.login", "ip", r.RemoteAddr, "user", username)
 		// Set the authentication cookie, if requested.
 		if r.URL.Query().Get("cookie") == "true" {
 			http.SetCookie(w, &http.Cookie{
@@ -56,7 +57,8 @@ func (connector *Connector) registerAuthRoutes() {
 	// GET /logout
 	connector.Router.HandleFunc("/logout", func(w http.ResponseWriter, r *http.Request) {
 		// Check with authenticator.
-		if connector.Validate(w, r) == "" {
+		user := connector.Validate(w, r)
+		if user == "" {
 			return
 		}
 		token := auth.GetTokenFromRequest(r)
@@ -76,13 +78,15 @@ func (connector *Connector) registerAuthRoutes() {
 			SameSite: http.SameSiteStrictMode,
 		})
 		// Send the response.
+		connector.Info("auth.logout", "ip", r.RemoteAddr, "user", user)
 		fmt.Fprintln(w, "{\"success\":true}")
 	})
 
 	// GET /ott
 	connector.Router.HandleFunc("/ott", func(w http.ResponseWriter, r *http.Request) {
 		// Check with authenticator.
-		if connector.Validate(w, r) == "" {
+		user := connector.Validate(w, r)
+		if user == "" {
 			return
 		}
 		token := auth.GetTokenFromRequest(r)
@@ -92,6 +96,7 @@ func (connector *Connector) registerAuthRoutes() {
 		ticketString := base64.StdEncoding.EncodeToString(ticket)
 		connector.Tickets.Store(ticketString, Ticket{
 			Time:   time.Now().Unix(),
+			User:   user,
 			Token:  token,
 			IPAddr: GetIP(r),
 		})
