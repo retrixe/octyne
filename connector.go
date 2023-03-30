@@ -459,7 +459,8 @@ func (connector *Connector) registerMiscRoutes() {
 					err := json.Unmarshal(message, &data)
 					if err == nil {
 						if data["type"] == "input" && data["data"] != "" {
-							connector.Info("server.console.input", "ip", GetIP(r), "user", user, "server", id)
+							connector.Info("server.console.input", "ip", GetIP(r), "user", user, "server", id,
+								"input", data["data"])
 							process.SendCommand(data["data"])
 						} else if data["type"] == "ping" {
 							c.WriteJSON(struct { // skipcq GSC-G104
@@ -479,7 +480,8 @@ func (connector *Connector) registerMiscRoutes() {
 						}{"error", "Invalid message format"})
 					}
 				} else {
-					connector.Info("server.console.input", "ip", GetIP(r), "user", user, "server", id)
+					connector.Info("server.console.input", "ip", GetIP(r), "user", user, "server", id,
+						"input", string(message))
 					process.SendCommand(string(message))
 				}
 			}

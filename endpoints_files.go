@@ -423,8 +423,9 @@ func (connector *Connector) registerFileRoutes() {
 			archive := zip.NewWriter(zipFile)
 			defer archive.Close()
 			// Archive stuff inside.
-			for _, file := range files { // TODO: Why is parent always process.Directory?
-				err := system.AddFileToZip(archive, process.Directory, file, r.Header.Get("compress") != "false")
+			compressed := r.Header.Get("compress") != "false" // TODO: Mismatch with public API!
+			for _, file := range files {                      // TODO: Why is parent always process.Directory?
+				err := system.AddFileToZip(archive, process.Directory, file, compressed)
 				if err != nil {
 					log.Println("An error occurred when adding "+file+" to "+zipPath, "("+process.Name+")", err)
 					httpError(w, "Internal Server Error!", http.StatusInternalServerError)
@@ -432,7 +433,7 @@ func (connector *Connector) registerFileRoutes() {
 				}
 			}
 			connector.Info("server.files.compress", "ip", GetIP(r), "user", user, "server", id,
-				"zipFile", r.URL.Query().Get("path"), "files", files)
+				"zipFile", r.URL.Query().Get("path"), "files", files, "compressed", compressed)
 			fmt.Fprintln(w, "{\"success\":true}")
 		} else {
 			httpError(w, "Only POST is allowed!", http.StatusMethodNotAllowed)
