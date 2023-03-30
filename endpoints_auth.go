@@ -29,8 +29,12 @@ func (connector *Connector) registerAuthRoutes() {
 			return
 		}
 		// Authorize the user.
-		token := connector.Login(username, password)
-		if token == "" {
+		token, err := connector.Login(username, password)
+		if err != nil {
+			log.Println("An error occurred when logging user in!", err)
+			httpError(w, "Internal Server Error!", http.StatusInternalServerError)
+			return
+		} else if token == "" {
 			httpError(w, "Invalid username or password!", http.StatusUnauthorized)
 			return
 		}
@@ -63,8 +67,12 @@ func (connector *Connector) registerAuthRoutes() {
 		}
 		token := auth.GetTokenFromRequest(r)
 		// Authorize the user.
-		success := connector.Logout(token)
-		if !success {
+		success, err := connector.Logout(token)
+		if err != nil {
+			log.Println("An error occurred when logging out user!", err)
+			httpError(w, "Internal Server Error!", http.StatusInternalServerError)
+			return
+		} else if !success {
 			httpError(w, "Invalid token, failed to logout!", http.StatusUnauthorized)
 			return
 		}

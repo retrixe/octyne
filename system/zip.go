@@ -58,7 +58,7 @@ func UnzipFile(zipFile string, location string) error {
 	return nil
 }
 
-// AddFileToZip adds a file to a zip.Writer using Deflate.
+// AddFileToZip adds a file or folder to a zip.Writer using Deflate.
 func AddFileToZip(archive *zip.Writer, dir string, file string, compress bool) error {
 	fileToZip, err := os.Open(joinPath(dir, file))
 	if err != nil {

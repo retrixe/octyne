@@ -17,9 +17,9 @@ type Authenticator interface {
 	// Validate is called on an HTTP API request and returns the user's name if request is authenticated.
 	Validate(w http.ResponseWriter, r *http.Request) string
 	// Login allows logging in a user and returning the token.
-	Login(username string, password string) string
+	Login(username string, password string) (string, error)
 	// Logout allows logging out of a user and deleting the token from the server.
-	Logout(token string) bool
+	Logout(token string) (bool, error)
 	// Close closes the authenticator. Once closed, the authenticator should not be used.
 	Close() error
 }
@@ -39,14 +39,14 @@ func (a *ReplaceableAuthenticator) Validate(w http.ResponseWriter, r *http.Reque
 }
 
 // Login allows logging in a user and returning the token.
-func (a *ReplaceableAuthenticator) Login(username string, password string) string {
+func (a *ReplaceableAuthenticator) Login(username string, password string) (string, error) {
 	a.EngineMutex.RLock()
 	defer a.EngineMutex.RUnlock()
 	return a.Engine.Login(username, password)
 }
 
 // Logout allows logging out of a user and deleting the token from the server.
-func (a *ReplaceableAuthenticator) Logout(token string) bool {
+func (a *ReplaceableAuthenticator) Logout(token string) (bool, error) {
 	a.EngineMutex.RLock()
 	defer a.EngineMutex.RUnlock()
 	return a.Engine.Logout(token)

@@ -56,33 +56,32 @@ func (a *RedisAuthenticator) Validate(w http.ResponseWriter, r *http.Request) st
 }
 
 // Login allows logging in a user and returning the token.
-func (a *RedisAuthenticator) Login(username string, password string) string {
+func (a *RedisAuthenticator) Login(username string, password string) (string, error) {
 	token := checkValidLoginAndGenerateToken(username, password)
 	if token == "" {
-		return ""
+		return "", nil
 	}
 	conn := a.Redis.Get()
 	defer conn.Close()
 	_, err := conn.Do("SET", "octyne-token:"+token, username)
 	if err != nil {
-		log.Println("An error occurred while making a request to Redis for login!", err) // skipcq: GO-S0904
+		return "", err
 	}
-	return token
+	return token, nil
 }
 
 // Logout allows logging out of a user and deleting the token from the server.
-func (a *RedisAuthenticator) Logout(token string) bool {
+func (a *RedisAuthenticator) Logout(token string) (bool, error) {
 	if !isValidToken(token) {
-		return false
+		return false, nil
 	}
 	conn := a.Redis.Get()
 	defer conn.Close()
 	res, err := redis.Int(conn.Do("DEL", "octyne-token:"+token))
 	if err != nil {
-		log.Println("An error occurred while making a request to Redis for logout!", err) // skipcq: GO-S0904
-		return false
+		return false, err
 	}
-	return res == 1
+	return res == 1, nil
 }
 
 // Close closes the authenticator. Once closed, the authenticator should not be used.

@@ -35,22 +35,22 @@ func (a *MemoryAuthenticator) Validate(w http.ResponseWriter, r *http.Request) s
 }
 
 // Login allows logging in a user and returning the token.
-func (a *MemoryAuthenticator) Login(username string, password string) string {
+func (a *MemoryAuthenticator) Login(username string, password string) (string, error) {
 	token := checkValidLoginAndGenerateToken(username, password)
 	if token == "" {
-		return ""
+		return "", nil
 	}
 	a.Tokens.Store(token, username)
-	return token
+	return token, nil
 }
 
 // Logout allows logging out of a user and deleting the token from the server.
-func (a *MemoryAuthenticator) Logout(token string) bool {
+func (a *MemoryAuthenticator) Logout(token string) (bool, error) {
 	if !isValidToken(token) {
-		return false
+		return false, nil
 	}
 	_, tokenExisted := a.Tokens.LoadAndDelete(token)
-	return tokenExisted
+	return tokenExisted, nil
 }
 
 // Close closes the authenticator. This is no-op for MemoryAuthenticator.
