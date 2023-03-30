@@ -69,6 +69,20 @@ func AddFileToZip(archive *zip.Writer, dir string, file string, compress bool) e
 	if err != nil {
 		return err
 	}
+	// If the file is a folder, recursively add its contents to the zip.
+	if info.IsDir() {
+		files, err := os.ReadDir(joinPath(dir, file))
+		if err != nil {
+			return err
+		}
+		for _, child := range files {
+			err = AddFileToZip(archive, dir, joinPath(file, child.Name()), compress)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 	header, err := zip.FileInfoHeader(info)
 	if err != nil {
 		return err
