@@ -5,9 +5,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -17,10 +19,14 @@ import (
 	"github.com/puzpuzpuz/xsync/v2"
 	"github.com/retrixe/octyne/auth"
 	"github.com/retrixe/octyne/system"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 // Logger handles file logging to zapLogger.
 type Logger struct {
+	Zap *zap.SugaredLogger
 	LoggingConfig
 	Lock sync.RWMutex
 }
@@ -30,8 +36,23 @@ func (l *Logger) Info(action string, args ...interface{}) {
 	l.Lock.RLock()
 	defer l.Lock.RUnlock()
 	if l.ShouldLog(action) {
-		logger.Sugar().Infow("user performed action", append([]interface{}{"action", action}, args...))
+		l.Zap.Infow("user performed action", append([]interface{}{"action", action}, args...)...)
 	}
+}
+
+// CreateZapLogger creates a new zap.Logger instance.
+func CreateZapLogger(config LoggingConfig) *zap.SugaredLogger {
+	var w zapcore.WriteSyncer
+	if config.Enabled {
+		w = zapcore.AddSync(&lumberjack.Logger{
+			Filename: filepath.Join(config.Path, "octyne.log"),
+			MaxSize:  1, // megabytes
+		})
+	} else {
+		w = zapcore.AddSync(io.Discard)
+	}
+	return zap.New(zapcore.NewCore(
+		zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()), w, zap.InfoLevel)).Sugar()
 }
 
 // An internal representation of Process along with the clients connected to it and its output.
@@ -84,7 +105,7 @@ func InitializeConnector(config *Config) *Connector {
 	// Create the connector.
 	connector := &Connector{
 		Router:        mux.NewRouter().StrictSlash(true),
-		Logger:        &Logger{LoggingConfig: config.Logging},
+		Logger:        &Logger{LoggingConfig: config.Logging, Zap: CreateZapLogger(config.Logging)},
 		Processes:     xsync.NewMapOf[*managedProcess](),
 		Tickets:       xsync.NewMapOf[Ticket](),
 		Authenticator: &auth.ReplaceableAuthenticator{Engine: authenticator},
@@ -202,9 +223,13 @@ func (connector *Connector) registerMiscRoutes() {
 			return
 		}
 		// Update logged actions.
-		connector.Logger.Lock.Lock()
-		defer connector.Logger.Lock.Unlock()
-		connector.Logger.LoggingConfig = config.Logging
+		func() {
+			connector.Logger.Lock.Lock()
+			defer connector.Logger.Lock.Unlock()
+			connector.Logger.Zap.Sync()
+			connector.Logger.Zap = CreateZapLogger(config.Logging)
+			connector.Logger.LoggingConfig = config.Logging
+		}()
 		// Replace authenticator if changed. We are guaranteed that Authenticator is Replaceable.
 		replaceableAuthenticator := connector.Authenticator.(*auth.ReplaceableAuthenticator)
 		replaceableAuthenticator.EngineMutex.Lock()

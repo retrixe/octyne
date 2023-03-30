@@ -2,18 +2,13 @@ package main
 
 import (
 	"encoding/json"
-	"io"
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"time"
 
 	"github.com/gorilla/handlers"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 // OctyneVersion is the last version of Octyne this code is based on.
@@ -27,7 +22,6 @@ func getPort(config *Config) string {
 }
 
 var info *log.Logger
-var logger *zap.Logger
 
 func main() {
 	if len(os.Args) >= 2 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
@@ -50,19 +44,6 @@ func main() {
 	log.SetOutput(os.Stderr)
 	log.SetPrefix("[Octyne] ")
 	info = log.New(os.Stdout, "[Octyne] ", log.Flags())
-	var w zapcore.WriteSyncer
-	if config.Logging.Enabled {
-		w = zapcore.AddSync(&lumberjack.Logger{
-			Filename: filepath.Join(config.Logging.Path, "octyne.log"),
-			MaxSize:  1, // megabytes
-		})
-	} else {
-		w = zapcore.AddSync(io.Discard)
-	}
-	logger = zap.New(zapcore.NewCore(
-		zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()), w, zap.InfoLevel))
-	defer logger.Sync()
-	defer os.Exit(1)
 
 	// Get a slice of server names.
 	servers := make([]string, 0, len(config.Servers))
@@ -73,6 +54,8 @@ func main() {
 
 	// Setup daemon connector.
 	connector := InitializeConnector(&config)
+	defer connector.Logger.Zap.Sync()
+	defer os.Exit(1)
 
 	// Run processes, passing the daemon connector.
 	for _, name := range servers {
@@ -82,7 +65,7 @@ func main() {
 	// Listen.
 	port := getPort(&config)
 	info.Println("Listening to port " + port[1:])
-	logger.Sugar().Infow("started octyne", "port", config.Port)
+	connector.Logger.Zap.Infow("started octyne", "port", config.Port)
 	handler := handlers.CORS(
 		handlers.AllowedHeaders([]string{
 			"X-Requested-With", "Content-Type", "Authorization", "Username", "Password",
