@@ -5,9 +5,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -17,7 +19,41 @@ import (
 	"github.com/puzpuzpuz/xsync/v2"
 	"github.com/retrixe/octyne/auth"
 	"github.com/retrixe/octyne/system"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
+
+// Logger handles file logging to zapLogger.
+type Logger struct {
+	Zap *zap.SugaredLogger
+	LoggingConfig
+	Lock sync.RWMutex
+}
+
+// Info calls the underlying zap.Logger if the action should be logged.
+func (l *Logger) Info(action string, args ...interface{}) {
+	l.Lock.RLock()
+	defer l.Lock.RUnlock()
+	if l.ShouldLog(action) {
+		l.Zap.Infow("user performed action", append([]interface{}{"action", action}, args...)...)
+	}
+}
+
+// CreateZapLogger creates a new zap.Logger instance.
+func CreateZapLogger(config LoggingConfig) *zap.SugaredLogger {
+	var w zapcore.WriteSyncer
+	if config.Enabled {
+		w = zapcore.AddSync(&lumberjack.Logger{
+			Filename: filepath.Join(config.Path, "octyne.log"),
+			MaxSize:  1, // megabytes
+		})
+	} else {
+		w = zapcore.AddSync(io.Discard)
+	}
+	return zap.New(zapcore.NewCore(
+		zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()), w, zap.InfoLevel)).Sugar()
+}
 
 // An internal representation of Process along with the clients connected to it and its output.
 type managedProcess struct {
@@ -30,6 +66,7 @@ type managedProcess struct {
 // Ticket is a one-time ticket usable by browsers to quickly authenticate with the WebSocket API.
 type Ticket struct {
 	Time   int64
+	User   string
 	Token  string
 	IPAddr string
 }
@@ -39,6 +76,7 @@ type Connector struct {
 	auth.Authenticator
 	*mux.Router
 	*websocket.Upgrader
+	*Logger
 	Processes *xsync.MapOf[string, *managedProcess]
 	Tickets   *xsync.MapOf[string, Ticket]
 }
@@ -67,6 +105,7 @@ func InitializeConnector(config *Config) *Connector {
 	// Create the connector.
 	connector := &Connector{
 		Router:        mux.NewRouter().StrictSlash(true),
+		Logger:        &Logger{LoggingConfig: config.Logging, Zap: CreateZapLogger(config.Logging)},
 		Processes:     xsync.NewMapOf[*managedProcess](),
 		Tickets:       xsync.NewMapOf[Ticket](),
 		Authenticator: &auth.ReplaceableAuthenticator{Engine: authenticator},
@@ -165,7 +204,8 @@ func (connector *Connector) registerMiscRoutes() {
 	// GET /config/reload
 	connector.Router.HandleFunc("/config/reload", func(w http.ResponseWriter, r *http.Request) {
 		// Check with authenticator.
-		if connector.Validate(w, r) == "" {
+		user := connector.Validate(w, r)
+		if user == "" {
 			return
 		}
 		// Read the new config.
@@ -182,6 +222,14 @@ func (connector *Connector) registerMiscRoutes() {
 			httpError(w, "An error occurred while parsing config!", http.StatusInternalServerError)
 			return
 		}
+		// Update logged actions.
+		func() {
+			connector.Logger.Lock.Lock()
+			defer connector.Logger.Lock.Unlock()
+			connector.Logger.Zap.Sync()
+			connector.Logger.Zap = CreateZapLogger(config.Logging)
+			connector.Logger.LoggingConfig = config.Logging
+		}()
 		// Replace authenticator if changed. We are guaranteed that Authenticator is Replaceable.
 		replaceableAuthenticator := connector.Authenticator.(*auth.ReplaceableAuthenticator)
 		replaceableAuthenticator.EngineMutex.Lock()
@@ -223,6 +271,7 @@ func (connector *Connector) registerMiscRoutes() {
 		})
 		// TODO: Reload HTTP server, mark server for deletion instead of instantly deleting them.
 		// Send the response.
+		connector.Info("config.reload", "ip", GetIP(r), "user", user)
 		fmt.Fprintln(w, "{\"success\":true}")
 		info.Println("Config reloaded successfully!")
 	})
@@ -258,7 +307,8 @@ func (connector *Connector) registerMiscRoutes() {
 	totalMemory := int64(system.GetTotalSystemMemory())
 	connector.Router.HandleFunc("/server/{id}", func(w http.ResponseWriter, r *http.Request) {
 		// Check with authenticator.
-		if connector.Validate(w, r) == "" {
+		user := connector.Validate(w, r)
+		if user == "" {
 			return
 		}
 		// Get the process being accessed.
@@ -284,6 +334,7 @@ func (connector *Connector) registerMiscRoutes() {
 				// Start process if required.
 				if process.Online != 1 {
 					err = process.StartProcess()
+					connector.Info("server.start", "ip", GetIP(r), "user", user, "server", id)
 				}
 				// Send a response.
 				res := make(map[string]bool)
@@ -295,8 +346,10 @@ func (connector *Connector) registerMiscRoutes() {
 					// Octyne 2.x should drop STOP or move it to SIGTERM.
 					if operation == "KILL" || operation == "STOP" {
 						process.KillProcess()
+						connector.Info("server.kill", "ip", GetIP(r), "user", user, "server", id)
 					} else {
 						process.StopProcess()
+						connector.Info("server.stop", "ip", GetIP(r), "user", user, "server", id)
 					}
 				}
 				// Send a response.
@@ -348,7 +401,10 @@ func (connector *Connector) registerMiscRoutes() {
 	connector.Router.HandleFunc("/server/{id}/console", func(w http.ResponseWriter, r *http.Request) {
 		// Check with authenticator.
 		ticket, ticketExists := connector.Tickets.LoadAndDelete(r.URL.Query().Get("ticket"))
-		if !(ticketExists && ticket.IPAddr == GetIP(r)) && connector.Validate(w, r) == "" {
+		user := ""
+		if ticketExists && ticket.IPAddr == GetIP(r) {
+			user = ticket.User
+		} else if user = connector.Validate(w, r); user == "" {
 			return
 		}
 		// Retrieve the token.
@@ -368,6 +424,7 @@ func (connector *Connector) registerMiscRoutes() {
 		c, err := connector.Upgrade(w, r, nil)
 		v2 := c.Subprotocol() == "console-v2"
 		if err == nil {
+			connector.Info("server.console.access", "ip", GetIP(r), "user", user, "server", id)
 			defer c.Close()
 			// Setup deadlines.
 			limit := 30 * time.Second
@@ -427,6 +484,8 @@ func (connector *Connector) registerMiscRoutes() {
 					err := json.Unmarshal(message, &data)
 					if err == nil {
 						if data["type"] == "input" && data["data"] != "" {
+							connector.Info("server.console.input", "ip", GetIP(r), "user", user, "server", id,
+								"input", data["data"])
 							process.SendCommand(data["data"])
 						} else if data["type"] == "ping" {
 							c.WriteJSON(struct { // skipcq GSC-G104
@@ -446,6 +505,8 @@ func (connector *Connector) registerMiscRoutes() {
 						}{"error", "Invalid message format"})
 					}
 				} else {
+					connector.Info("server.console.input", "ip", GetIP(r), "user", user, "server", id,
+						"input", string(message))
 					process.SendCommand(string(message))
 				}
 			}

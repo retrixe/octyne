@@ -1,6 +1,7 @@
 # configuration files
 *config.json
 users.json
+logs/
 
 # binaries
 main

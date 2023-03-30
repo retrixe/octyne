@@ -7,6 +7,13 @@ require (
 	github.com/gorilla/handlers v1.4.2
 	github.com/gorilla/mux v1.7.4
 	github.com/gorilla/websocket v1.4.2
+	go.uber.org/zap v1.24.0
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1
+)
+
+require (
+	go.uber.org/atomic v1.7.0 // indirect
+	go.uber.org/multierr v1.6.0 // indirect
 )
 
 require github.com/puzpuzpuz/xsync/v2 v2.4.0

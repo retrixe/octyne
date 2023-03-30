@@ -108,8 +108,10 @@ func (connector *Connector) registerFileRoutes() {
 	// PATCH /server/{id}/file?path=path
 	connector.Router.HandleFunc("/server/{id}/file", func(w http.ResponseWriter, r *http.Request) {
 		ticket, ticketExists := connector.Tickets.LoadAndDelete(r.URL.Query().Get("ticket"))
-		if !(ticketExists && r.Method == "GET" && ticket.IPAddr == GetIP(r)) &&
-			connector.Validate(w, r) == "" {
+		user := ""
+		if ticketExists && ticket.IPAddr == GetIP(r) && r.Method == "GET" {
+			user = ticket.User
+		} else if user = connector.Validate(w, r); user == "" {
 			return
 		}
 		// Get the process being accessed.
@@ -149,6 +151,8 @@ func (connector *Connector) registerFileRoutes() {
 			w.Header().Set("Content-Length", fmt.Sprint(stat.Size()))
 			file, _ = os.Open(filePath)
 			defer file.Close()
+			connector.Info("server.files.download", "ip", GetIP(r), "user", user, "server", id,
+				"path", clean(r.URL.Query().Get("path")))
 			io.Copy(w, file)
 		} else if r.Method == "DELETE" {
 			// Check if the file exists.
@@ -171,6 +175,8 @@ func (connector *Connector) registerFileRoutes() {
 				httpError(w, "Internal Server Error!", http.StatusInternalServerError)
 				return
 			}
+			connector.Info("server.files.delete", "ip", GetIP(r), "user", user, "server", id,
+				"path", clean(r.URL.Query().Get("path")))
 			fmt.Fprintln(w, "{\"success\":true}")
 		} else if r.Method == "POST" {
 			// Parse our multipart form, 5120 << 20 specifies a maximum upload of a 5 GB file.
@@ -200,6 +206,8 @@ func (connector *Connector) registerFileRoutes() {
 			}
 			defer toWrite.Close()
 			// write this byte array to our file
+			connector.Info("server.files.upload", "ip", GetIP(r), "user", user, "server", id,
+				"path", clean(r.URL.Query().Get("path")), "filename", meta.Filename)
 			io.Copy(toWrite, file)
 			fmt.Fprintln(w, "{\"success\":true}")
 		} else if r.Method == "PATCH" {
@@ -277,6 +285,8 @@ func (connector *Connector) registerFileRoutes() {
 						httpError(w, "Internal Server Error!", http.StatusInternalServerError)
 						return
 					}
+					connector.Info("server.files.move", "ip", GetIP(r), "user", user, "server", id,
+						"src", clean(req.Src), "dest", clean(req.Dest))
 					fmt.Fprintln(w, "{\"success\":true}")
 				} else {
 					err := system.Copy(stat.Mode(), oldpath, newpath)
@@ -285,6 +295,8 @@ func (connector *Connector) registerFileRoutes() {
 						httpError(w, "Internal Server Error!", http.StatusInternalServerError)
 						return
 					}
+					connector.Info("server.files.copy", "ip", GetIP(r), "user", user, "server", id,
+						"src", clean(req.Src), "dest", clean(req.Dest))
 					fmt.Fprintln(w, "{\"success\":true}")
 				}
 			} else {
@@ -298,7 +310,8 @@ func (connector *Connector) registerFileRoutes() {
 	// POST /server/{id}/folder?path=path
 	connector.Router.HandleFunc("/server/{id}/folder", func(w http.ResponseWriter, r *http.Request) {
 		// Check with authenticator.
-		if connector.Validate(w, r) == "" {
+		user := connector.Validate(w, r)
+		if user == "" {
 			return
 		}
 		// Get the process being accessed.
@@ -331,6 +344,8 @@ func (connector *Connector) registerFileRoutes() {
 				httpError(w, "Internal Server Error!", http.StatusInternalServerError)
 				return
 			}
+			connector.Info("server.files.createFolder", "ip", GetIP(r), "user", user, "server", id,
+				"path", clean(r.URL.Query().Get("path")))
 			fmt.Fprintln(w, "{\"success\":true}")
 		} else {
 			httpError(w, "Only POST is allowed!", http.StatusMethodNotAllowed)
@@ -340,7 +355,8 @@ func (connector *Connector) registerFileRoutes() {
 	// POST /server/{id}/compress?path=path&compress=true/false (compress is optional, default: true)
 	connector.Router.HandleFunc("/server/{id}/compress", func(w http.ResponseWriter, r *http.Request) {
 		// Check with authenticator.
-		if connector.Validate(w, r) == "" {
+		user := connector.Validate(w, r)
+		if user == "" {
 			return
 		}
 		// Get the process being accessed.
@@ -407,14 +423,17 @@ func (connector *Connector) registerFileRoutes() {
 			archive := zip.NewWriter(zipFile)
 			defer archive.Close()
 			// Archive stuff inside.
-			for _, file := range files { // TODO: Why is parent always process.Directory?
-				err := system.AddFileToZip(archive, process.Directory, file, r.Header.Get("compress") != "false")
+			compressed := r.Header.Get("compress") != "false" // TODO: Mismatch with public API!
+			for _, file := range files {                      // TODO: Why is parent always process.Directory?
+				err := system.AddFileToZip(archive, process.Directory, file, compressed)
 				if err != nil {
 					log.Println("An error occurred when adding "+file+" to "+zipPath, "("+process.Name+")", err)
 					httpError(w, "Internal Server Error!", http.StatusInternalServerError)
 					return
 				}
 			}
+			connector.Info("server.files.compress", "ip", GetIP(r), "user", user, "server", id,
+				"zipFile", clean(r.URL.Query().Get("path")), "files", files, "compressed", compressed)
 			fmt.Fprintln(w, "{\"success\":true}")
 		} else {
 			httpError(w, "Only POST is allowed!", http.StatusMethodNotAllowed)
@@ -424,7 +443,8 @@ func (connector *Connector) registerFileRoutes() {
 	// POST /server/{id}/decompress?path=path
 	connector.Router.HandleFunc("/server/{id}/decompress", func(w http.ResponseWriter, r *http.Request) {
 		// Check with authenticator.
-		if connector.Validate(w, r) == "" {
+		user := connector.Validate(w, r)
+		if user == "" {
 			return
 		}
 		// Get the process being accessed.
@@ -491,6 +511,8 @@ func (connector *Connector) registerFileRoutes() {
 				httpError(w, "An error occurred while unzipping!", http.StatusInternalServerError)
 				return
 			}
+			connector.Info("server.files.decompress", "ip", GetIP(r), "user", user, "server", id,
+				"zipFile", clean(r.URL.Query().Get("path")), "destPath", body.String())
 			fmt.Fprintln(w, "{\"success\":true}")
 		} else {
 			httpError(w, "Only POST is allowed!", http.StatusMethodNotAllowed)

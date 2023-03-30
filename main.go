@@ -28,9 +28,6 @@ func main() {
 		println("octyne version " + OctyneVersion)
 		return
 	}
-	log.SetOutput(os.Stderr)
-	log.SetPrefix("[Octyne] ")
-	info = log.New(os.Stdout, "[Octyne] ", log.Flags())
 
 	// Read config.
 	var config Config
@@ -43,6 +40,11 @@ func main() {
 		panic("An error occurred while attempting to read config! " + err.Error())
 	}
 
+	// Setup logging.
+	log.SetOutput(os.Stderr)
+	log.SetPrefix("[Octyne] ")
+	info = log.New(os.Stdout, "[Octyne] ", log.Flags())
+
 	// Get a slice of server names.
 	servers := make([]string, 0, len(config.Servers))
 	for k := range config.Servers {
@@ -52,6 +54,8 @@ func main() {
 
 	// Setup daemon connector.
 	connector := InitializeConnector(&config)
+	defer connector.Logger.Zap.Sync()
+	defer os.Exit(1)
 
 	// Run processes, passing the daemon connector.
 	for _, name := range servers {
@@ -61,6 +65,7 @@ func main() {
 	// Listen.
 	port := getPort(&config)
 	info.Println("Listening to port " + port[1:])
+	connector.Logger.Zap.Infow("started octyne", "port", config.Port)
 	handler := handlers.CORS(
 		handlers.AllowedHeaders([]string{
 			"X-Requested-With", "Content-Type", "Authorization", "Username", "Password",
@@ -82,5 +87,5 @@ func main() {
 	if authenticatorErr := connector.Authenticator.Close(); authenticatorErr != nil {
 		log.Println("Error when closing the authenticator!", authenticatorErr)
 	}
-	log.Fatalln(err) // skipcq: GO-S0904
+	log.Println(err) // skipcq: GO-S0904
 }
