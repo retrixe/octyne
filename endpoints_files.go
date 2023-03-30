@@ -245,7 +245,6 @@ func (connector *Connector) registerFileRoutes() {
 			// Possible operations: mv, cp
 			if req.Operation == "mv" || req.Operation == "cp" {
 				// Check if original file exists.
-				// TODO: Needs better sanitation.
 				oldpath := joinPath(process.Directory, req.Src)
 				newpath := joinPath(process.Directory, req.Dest)
 				if !strings.HasPrefix(oldpath, clean(process.Directory)) ||
@@ -423,8 +422,9 @@ func (connector *Connector) registerFileRoutes() {
 			archive := zip.NewWriter(zipFile)
 			defer archive.Close()
 			// Archive stuff inside.
-			compressed := r.Header.Get("compress") != "false" // TODO: Mismatch with public API!
-			for _, file := range files {                      // TODO: Why is parent always process.Directory?
+			compressed := r.URL.Query().Get("compress") != "false"
+			// TODO: Why is parent always process.Directory? Support different base path?
+			for _, file := range files {
 				err := system.AddFileToZip(archive, process.Directory, file, compressed)
 				if err != nil {
 					log.Println("An error occurred when adding "+file+" to "+zipPath, "("+process.Name+")", err)

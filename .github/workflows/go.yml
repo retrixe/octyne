@@ -15,7 +15,7 @@ jobs:
         os: [ubuntu-20.04, macos-12, windows-latest]
     steps:
     - name: Set up Go >=1.19
-      uses: actions/setup-go@v3
+      uses: actions/setup-go@v4
       with:
         go-version: '>=1.19.0'
       id: go
