@@ -30,7 +30,7 @@ func (l *Logger) Info(action string, args ...interface{}) {
 	l.Lock.RLock()
 	defer l.Lock.RUnlock()
 	if l.ShouldLog(action) {
-		logger.Sugar().Info("action", action, args)
+		logger.Sugar().Infow("user performed action", append([]interface{}{"action", action}, args...))
 	}
 }
 

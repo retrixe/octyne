@@ -80,9 +80,7 @@ func (c *LoggingConfig) ShouldLog(action string) bool {
 		return false
 	} else if c.Actions == nil {
 		return true
-	} else if value, exists := c.Actions[action]; !exists {
-		return true
-	} else {
-		return value
 	}
+	value, exists := c.Actions[action]
+	return !exists || value
 }

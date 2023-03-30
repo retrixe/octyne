@@ -71,9 +71,9 @@ Contains users who can log into Octyne. Use a secure method to hash your passwor
 
 ### Logging
 
-**Note: Fine-grained control over logging is an *experimental* feature. Hence, the names for actions may change in any version, not just major versions. However, we will generally try to avoid this.**
+**Note: Fine-grained control over logging is currently *experimental*. Therefore, action names may change in any version, not just major versions. However, we will generally try to avoid this in the interest of stability.**
 
-By default, Octyne will log all actions performed by users. You can enable/disable logging for specific actions by setting the value of the action to `true`/`false` in the `logging.actions` object. For example, to disable logging for `auth.login` and `auth.logout`:
+By default, Octyne will log all actions performed by users. You can enable/disable logging for specific actions by setting the action to `true` or `false` in the `logging.actions` object in `config.json`. For example, to disable logging for `auth.login` and `auth.logout`, your `actions` object would be:
 
 ```json
 "actions": {

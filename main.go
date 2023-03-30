@@ -59,12 +59,8 @@ func main() {
 	} else {
 		w = zapcore.AddSync(io.Discard)
 	}
-	core := zapcore.NewCore(
-		zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()),
-		w,
-		zap.InfoLevel,
-	)
-	logger = zap.New(core)
+	logger = zap.New(zapcore.NewCore(
+		zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()), w, zap.InfoLevel))
 	defer logger.Sync()
 	defer os.Exit(1)
 
@@ -86,7 +82,7 @@ func main() {
 	// Listen.
 	port := getPort(&config)
 	info.Println("Listening to port " + port[1:])
-	logger.Info("Listening to port " + port[1:])
+	logger.Sugar().Infow("started octyne", "port", config.Port)
 	handler := handlers.CORS(
 		handlers.AllowedHeaders([]string{
 			"X-Requested-With", "Content-Type", "Authorization", "Username", "Password",
