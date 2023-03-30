@@ -152,7 +152,7 @@ func (connector *Connector) registerFileRoutes() {
 			file, _ = os.Open(filePath)
 			defer file.Close()
 			connector.Info("server.files.download", "ip", GetIP(r), "user", user, "server", id,
-				"path", r.URL.Query().Get("path"))
+				"path", clean(r.URL.Query().Get("path")))
 			io.Copy(w, file)
 		} else if r.Method == "DELETE" {
 			// Check if the file exists.
@@ -176,7 +176,7 @@ func (connector *Connector) registerFileRoutes() {
 				return
 			}
 			connector.Info("server.files.delete", "ip", GetIP(r), "user", user, "server", id,
-				"path", r.URL.Query().Get("path"))
+				"path", clean(r.URL.Query().Get("path")))
 			fmt.Fprintln(w, "{\"success\":true}")
 		} else if r.Method == "POST" {
 			// Parse our multipart form, 5120 << 20 specifies a maximum upload of a 5 GB file.
@@ -207,7 +207,7 @@ func (connector *Connector) registerFileRoutes() {
 			defer toWrite.Close()
 			// write this byte array to our file
 			connector.Info("server.files.upload", "ip", GetIP(r), "user", user, "server", id,
-				"path", r.URL.Query().Get("path"), "filename", meta.Filename)
+				"path", clean(r.URL.Query().Get("path")), "filename", meta.Filename)
 			io.Copy(toWrite, file)
 			fmt.Fprintln(w, "{\"success\":true}")
 		} else if r.Method == "PATCH" {
@@ -286,7 +286,7 @@ func (connector *Connector) registerFileRoutes() {
 						return
 					}
 					connector.Info("server.files.move", "ip", GetIP(r), "user", user, "server", id,
-						"src", req.Src, "dest", req.Dest)
+						"src", clean(req.Src), "dest", clean(req.Dest))
 					fmt.Fprintln(w, "{\"success\":true}")
 				} else {
 					err := system.Copy(stat.Mode(), oldpath, newpath)
@@ -296,7 +296,7 @@ func (connector *Connector) registerFileRoutes() {
 						return
 					}
 					connector.Info("server.files.copy", "ip", GetIP(r), "user", user, "server", id,
-						"src", req.Src, "dest", req.Dest)
+						"src", clean(req.Src), "dest", clean(req.Dest))
 					fmt.Fprintln(w, "{\"success\":true}")
 				}
 			} else {
@@ -345,7 +345,7 @@ func (connector *Connector) registerFileRoutes() {
 				return
 			}
 			connector.Info("server.files.createFolder", "ip", GetIP(r), "user", user, "server", id,
-				"path", r.URL.Query().Get("path"))
+				"path", clean(r.URL.Query().Get("path")))
 			fmt.Fprintln(w, "{\"success\":true}")
 		} else {
 			httpError(w, "Only POST is allowed!", http.StatusMethodNotAllowed)
@@ -433,7 +433,7 @@ func (connector *Connector) registerFileRoutes() {
 				}
 			}
 			connector.Info("server.files.compress", "ip", GetIP(r), "user", user, "server", id,
-				"zipFile", r.URL.Query().Get("path"), "files", files, "compressed", compressed)
+				"zipFile", clean(r.URL.Query().Get("path")), "files", files, "compressed", compressed)
 			fmt.Fprintln(w, "{\"success\":true}")
 		} else {
 			httpError(w, "Only POST is allowed!", http.StatusMethodNotAllowed)
@@ -512,7 +512,7 @@ func (connector *Connector) registerFileRoutes() {
 				return
 			}
 			connector.Info("server.files.decompress", "ip", GetIP(r), "user", user, "server", id,
-				"zipFile", r.URL.Query().Get("path"), "destPath", body.String())
+				"zipFile", clean(r.URL.Query().Get("path")), "destPath", body.String())
 			fmt.Fprintln(w, "{\"success\":true}")
 		} else {
 			httpError(w, "Only POST is allowed!", http.StatusMethodNotAllowed)
