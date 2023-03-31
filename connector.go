@@ -176,7 +176,15 @@ func (connector *Connector) AddProcess(proc *Process) {
 					}
 					process.Console = process.Console + "\n" + m
 					process.Clients.Range(func(key string, connection chan []byte) bool {
-						connection <- []byte(m)
+						message, err := json.Marshal(struct {
+							Type string `json:"type"`
+							Data string `json:"data"`
+						}{"output", m})
+						if err != nil {
+							log.Println("Error in "+process.Name+" console!", err)
+						} else {
+							connection <- message
+						}
 						return true
 					})
 				})()
@@ -440,39 +448,40 @@ func (connector *Connector) registerMiscRoutes() {
 				}{"settings"})
 			}
 			// Use a channel to synchronise all writes to the WebSocket.
-			writeToWs := make(chan []byte, 8)
-			defer close(writeToWs)
+			writeChannel := make(chan []byte, 8)
+			defer close(writeChannel)
 			go (func() {
 				for {
-					data, ok := <-writeToWs
+					data, ok := <-writeChannel
 					if !ok {
 						break
 					} else if data == nil {
 						c.Close()
 						break
 					}
-					if v2 {
-						c.WriteJSON(struct { // skipcq GSC-G104
-							Type string `json:"type"`
-							Data string `json:"data"`
-						}{"output", string(data)})
-					} else {
-						c.WriteMessage(websocket.TextMessage, data) // skipcq GSC-G104
-					}
+					c.WriteMessage(websocket.TextMessage, data) // skipcq GSC-G104
 				}
 			})()
 			// Add connection to the process after sending current console output.
 			(func() {
 				process.ConsoleLock.RLock()
 				defer process.ConsoleLock.RUnlock()
-				writeToWs <- []byte(process.Console)
-				process.Clients.Store(token, writeToWs)
+				message, err := json.Marshal(struct {
+					Type string `json:"type"`
+					Data string `json:"data"`
+				}{"output", process.Console})
+				if err != nil {
+					log.Println("Error in "+process.Name+" console!", err)
+				} else {
+					writeChannel <- message
+				}
+				process.Clients.Store(token, writeChannel)
 			})()
 			// Read messages from the user and execute them.
 			for {
 				client, _ := process.Clients.Load(token)
 				// Another client has connected with the same token. Terminate existing connection.
-				if client != writeToWs {
+				if client != writeChannel {
 					break
 				}
 				// Read messages from the user.
@@ -481,6 +490,7 @@ func (connector *Connector) registerMiscRoutes() {
 					process.Clients.Delete(token)
 					break // The WebSocket connection has terminated.
 				}
+				c.SetReadDeadline(time.Now().Add(limit)) // Update read deadline.
 				if v2 {
 					var data map[string]string
 					err := json.Unmarshal(message, &data)
@@ -490,21 +500,24 @@ func (connector *Connector) registerMiscRoutes() {
 								"input", data["data"])
 							process.SendCommand(data["data"])
 						} else if data["type"] == "ping" {
-							c.WriteJSON(struct { // skipcq GSC-G104
+							json, _ := json.Marshal(struct { // skipcq GSC-G104
 								Type string `json:"type"`
 								ID   string `json:"id"`
 							}{"pong", data["id"]})
+							writeChannel <- json
 						} else {
-							c.WriteJSON(struct { // skipcq GSC-G104
+							json, _ := json.Marshal(struct { // skipcq GSC-G104
 								Type    string `json:"type"`
 								Message string `json:"message"`
 							}{"error", "Invalid message type: " + data["type"]})
+							writeChannel <- json
 						}
 					} else {
-						c.WriteJSON(struct { // skipcq GSC-G104
+						json, _ := json.Marshal(struct { // skipcq GSC-G104
 							Type    string `json:"type"`
 							Message string `json:"message"`
 						}{"error", "Invalid message format"})
+						writeChannel <- json
 					}
 				} else {
 					connector.Info("server.console.input", "ip", GetIP(r), "user", user, "server", id,
