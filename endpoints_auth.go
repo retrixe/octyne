@@ -199,9 +199,6 @@ func (connector *Connector) registerAuthRoutes() {
 			}
 			connector.Info("accounts.delete", "ip", GetIP(r), "user", user, "deletedUser", username)
 			delete(users, username)
-		} else {
-			httpError(w, "Only GET, POST, PATCH and DELETE are allowed!", http.StatusMethodNotAllowed)
-			return
 		}
 		usersJson, err := json.MarshalIndent(users, "", "  ")
 		if err != nil {

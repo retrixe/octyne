@@ -83,7 +83,7 @@ By default, Octyne will log all actions performed by users. You can enable/disab
 ```
 
 - Authentication (`auth`): `login`, `logout`
-- Configuration (`config`): `reload`
+- Configuration (`config`): `reload`, `view`, `edit`
 - Account management (`accounts`): `create`, `update`, `delete`
 - Server management (`server`):
   - Top-level actions: `start`, `stop`, `kill`

@@ -118,6 +118,8 @@ func InitializeConnector(config *Config) *Connector {
 		GET /logout
 		GET /ott (one-time ticket)
 
+		GET /config
+		PATCH /config
 		GET /config/reload
 
 		GET /accounts
@@ -211,6 +213,63 @@ func (connector *Connector) registerMiscRoutes() {
 		fmt.Fprintln(w, "{\"version\": \""+OctyneVersion+"\"}")
 	})
 
+	// GET /config
+	// PATCH /config
+	connector.Router.HandleFunc("/config", func(w http.ResponseWriter, r *http.Request) {
+		user := connector.Validate(w, r)
+		if user == "" {
+			return
+		} else if r.Method != "GET" && r.Method != "PATCH" {
+			httpError(w, "Only GET and PATCH are allowed!", http.StatusMethodNotAllowed)
+			return
+		}
+		if r.Method == "GET" {
+			contents, err := os.ReadFile("config.json")
+			if err != nil {
+				log.Println("Error reading config.json when user accessed /config!", err)
+				httpError(w, "Internal Server Error!", http.StatusInternalServerError)
+				return
+			}
+			connector.Info("config.view", "ip", GetIP(r), "user", user)
+			fmt.Fprintln(w, string(contents))
+		} else if r.Method == "PATCH" {
+			var buffer bytes.Buffer
+			_, err := buffer.ReadFrom(r.Body)
+			if err != nil {
+				httpError(w, "Failed to read body!", http.StatusBadRequest)
+				return
+			}
+			var config Config
+			err = json.Unmarshal(buffer.Bytes(), &config)
+			if err != nil {
+				httpError(w, "Invalid JSON body!", http.StatusBadRequest)
+				return
+			}
+			// Clean up the config once.
+			configJson, err := json.MarshalIndent(config, "", "  ")
+			if err != nil {
+				log.Println("Error serialising config.json when user modified config!")
+				httpError(w, "Internal Server Error!", http.StatusInternalServerError)
+				return
+			}
+			err = os.WriteFile("config.json~", []byte(string(configJson)+"\n"), 0666)
+			if err != nil {
+				log.Println("Error writing to config.json when user modified config!")
+				httpError(w, "Internal Server Error!", http.StatusInternalServerError)
+				return
+			}
+			err = os.Rename("config.json~", "config.json")
+			if err != nil {
+				log.Println("Error writing to config.json when user modified config!")
+				httpError(w, "Internal Server Error!", http.StatusInternalServerError)
+				return
+			}
+			connector.UpdateConfig(&config)
+			connector.Info("config.edit", "ip", GetIP(r), "user", user, "newConfig", config)
+			fmt.Fprintln(w, "{\"success\":true}")
+		}
+	})
+
 	// GET /config/reload
 	connector.Router.HandleFunc("/config/reload", func(w http.ResponseWriter, r *http.Request) {
 		// Check with authenticator.
@@ -232,54 +291,8 @@ func (connector *Connector) registerMiscRoutes() {
 			httpError(w, "An error occurred while parsing config!", http.StatusInternalServerError)
 			return
 		}
-		// Update logged actions.
-		func() {
-			connector.Logger.Lock.Lock()
-			defer connector.Logger.Lock.Unlock()
-			connector.Logger.Zap.Sync()
-			connector.Logger.Zap = CreateZapLogger(config.Logging)
-			connector.Logger.LoggingConfig = config.Logging
-		}()
-		// Replace authenticator if changed. We are guaranteed that Authenticator is Replaceable.
-		replaceableAuthenticator := connector.Authenticator.(*auth.ReplaceableAuthenticator)
-		replaceableAuthenticator.EngineMutex.Lock()
-		defer replaceableAuthenticator.EngineMutex.Unlock()
-		redisAuthenticator, usingRedis := replaceableAuthenticator.Engine.(*auth.RedisAuthenticator)
-		if usingRedis != config.Redis.Enabled ||
-			(usingRedis && redisAuthenticator.URL != config.Redis.URL) {
-			replaceableAuthenticator.Engine.Close() // Bypassing ReplaceableAuthenticator mutex Lock.
-			if config.Redis.Enabled {
-				replaceableAuthenticator.Engine = auth.NewRedisAuthenticator(config.Redis.URL)
-			} else {
-				replaceableAuthenticator.Engine = auth.NewMemoryAuthenticator()
-			}
-		}
-		// Add new processes.
-		for key := range config.Servers {
-			if _, ok := connector.Processes.Load(key); !ok {
-				go CreateProcess(key, config.Servers[key], connector)
-			}
-		}
-		// Modify/remove existing processes.
-		connector.Processes.Range(func(key string, value *managedProcess) bool {
-			serverConfig, ok := config.Servers[key]
-			if ok {
-				value.Process.ServerConfigMutex.Lock()
-				defer value.Process.ServerConfigMutex.Unlock()
-				value.Process.ServerConfig = serverConfig
-			} else {
-				if value, loaded := connector.Processes.LoadAndDelete(key); loaded { // Yes, this is safe.
-					value.KillProcess() // Other goroutines will cleanup.
-					value.Clients.Range(func(key string, ws chan []byte) bool {
-						ws <- nil
-						return true
-					})
-					value.Clients.Clear()
-				}
-			}
-			return true
-		})
-		// TODO: Reload HTTP server, mark server for deletion instead of instantly deleting them.
+		// Reload the config.
+		connector.UpdateConfig(&config)
 		// Send the response.
 		connector.Info("config.reload", "ip", GetIP(r), "user", user)
 		fmt.Fprintln(w, "{\"success\":true}")
@@ -527,4 +540,56 @@ func (connector *Connector) registerMiscRoutes() {
 			}
 		}
 	})
+}
+
+// UpdateConfig updates the connector with the new Config passed in arguments.
+func (connector *Connector) UpdateConfig(config *Config) {
+	// Update logged actions.
+	func() {
+		connector.Logger.Lock.Lock()
+		defer connector.Logger.Lock.Unlock()
+		connector.Logger.Zap.Sync()
+		connector.Logger.Zap = CreateZapLogger(config.Logging)
+		connector.Logger.LoggingConfig = config.Logging
+	}()
+	// Replace authenticator if changed. We are guaranteed that Authenticator is Replaceable.
+	replaceableAuthenticator := connector.Authenticator.(*auth.ReplaceableAuthenticator)
+	replaceableAuthenticator.EngineMutex.Lock()
+	defer replaceableAuthenticator.EngineMutex.Unlock()
+	redisAuthenticator, usingRedis := replaceableAuthenticator.Engine.(*auth.RedisAuthenticator)
+	if usingRedis != config.Redis.Enabled ||
+		(usingRedis && redisAuthenticator.URL != config.Redis.URL) {
+		replaceableAuthenticator.Engine.Close() // Bypassing ReplaceableAuthenticator mutex Lock.
+		if config.Redis.Enabled {
+			replaceableAuthenticator.Engine = auth.NewRedisAuthenticator(config.Redis.URL)
+		} else {
+			replaceableAuthenticator.Engine = auth.NewMemoryAuthenticator()
+		}
+	}
+	// Add new processes.
+	for key := range config.Servers {
+		if _, ok := connector.Processes.Load(key); !ok {
+			go CreateProcess(key, config.Servers[key], connector)
+		}
+	}
+	// Modify/remove existing processes.
+	connector.Processes.Range(func(key string, value *managedProcess) bool {
+		serverConfig, ok := config.Servers[key]
+		if ok {
+			value.Process.ServerConfigMutex.Lock()
+			defer value.Process.ServerConfigMutex.Unlock()
+			value.Process.ServerConfig = serverConfig
+		} else {
+			if value, loaded := connector.Processes.LoadAndDelete(key); loaded { // Yes, this is safe.
+				value.KillProcess() // Other goroutines will cleanup.
+				value.Clients.Range(func(key string, ws chan []byte) bool {
+					ws <- nil
+					return true
+				})
+				value.Clients.Clear()
+			}
+		}
+		return true
+	})
+	// TODO: Reload HTTP server, mark server for deletion instead of instantly deleting them.
 }
