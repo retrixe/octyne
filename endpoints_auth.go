@@ -117,6 +117,7 @@ func (connector *Connector) registerAuthRoutes() {
 		fmt.Fprintln(w, "{\"ticket\": \""+ticketString+"\"}")
 	})
 
+	// GET /accounts
 	// POST /accounts
 	// PATCH /accounts
 	// DELETE /accounts?username=username
@@ -128,8 +129,8 @@ func (connector *Connector) registerAuthRoutes() {
 		user := connector.Validate(w, r)
 		if user == "" {
 			return
-		} else if r.Method != "POST" && r.Method != "PATCH" && r.Method != "DELETE" {
-			httpError(w, "Only POST, PATCH and DELETE are allowed!", http.StatusMethodNotAllowed)
+		} else if r.Method != "GET" && r.Method != "POST" && r.Method != "PATCH" && r.Method != "DELETE" {
+			httpError(w, "Only GET, POST, PATCH and DELETE are allowed!", http.StatusMethodNotAllowed)
 			return
 		}
 		var users map[string]string
@@ -145,7 +146,20 @@ func (connector *Connector) registerAuthRoutes() {
 			httpError(w, "Internal Server Error!", http.StatusInternalServerError)
 			return
 		}
-		if r.Method == "POST" || r.Method == "PATCH" {
+		if r.Method == "GET" {
+			var usernames []string
+			for username := range users {
+				usernames = append(usernames, username)
+			}
+			usernamesJson, err := json.Marshal(usernames)
+			if err != nil {
+				log.Println("Error serialising usernames when listing accounts!")
+				httpError(w, "Internal Server Error!", http.StatusInternalServerError)
+				return
+			}
+			fmt.Fprintln(w, string(usernamesJson))
+			return
+		} else if r.Method == "POST" || r.Method == "PATCH" {
 			var buffer bytes.Buffer
 			_, err := buffer.ReadFrom(r.Body)
 			if err != nil {
@@ -185,6 +199,9 @@ func (connector *Connector) registerAuthRoutes() {
 			}
 			connector.Info("accounts.delete", "ip", GetIP(r), "user", user, "deletedUser", username)
 			delete(users, username)
+		} else {
+			httpError(w, "Only GET, POST, PATCH and DELETE are allowed!", http.StatusMethodNotAllowed)
+			return
 		}
 		usersJson, err := json.MarshalIndent(users, "", "  ")
 		if err != nil {
@@ -192,7 +209,13 @@ func (connector *Connector) registerAuthRoutes() {
 			httpError(w, "Internal Server Error!", http.StatusInternalServerError)
 			return
 		}
-		err = os.WriteFile("users.json", []byte(string(usersJson)+"\n"), 0666)
+		err = os.WriteFile("users.json~", []byte(string(usersJson)+"\n"), 0666)
+		if err != nil {
+			log.Println("Error writing to users.json when modifying accounts!")
+			httpError(w, "Internal Server Error!", http.StatusInternalServerError)
+			return
+		}
+		err = os.Rename("users.json~", "users.json")
 		if err != nil {
 			log.Println("Error writing to users.json when modifying accounts!")
 			httpError(w, "Internal Server Error!", http.StatusInternalServerError)

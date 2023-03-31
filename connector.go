@@ -119,6 +119,8 @@ func InitializeConnector(config *Config) *Connector {
 		GET /ott (one-time ticket)
 
 		GET /config/reload
+
+		GET /accounts
 		POST /accounts
 		PATCH /accounts
 		DELETE /accounts?username=username
