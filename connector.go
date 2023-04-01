@@ -58,7 +58,7 @@ func CreateZapLogger(config LoggingConfig) *zap.SugaredLogger {
 // An internal representation of Process along with the clients connected to it and its output.
 type managedProcess struct {
 	*Process
-	Clients     *xsync.MapOf[string, chan []byte]
+	Clients     *xsync.MapOf[string, chan interface{}]
 	Console     string
 	ConsoleLock sync.RWMutex
 }
@@ -154,7 +154,7 @@ func InitializeConnector(config *Config) *Connector {
 func (connector *Connector) AddProcess(proc *Process) {
 	process := &managedProcess{
 		Process: proc,
-		Clients: xsync.NewMapOf[chan []byte](),
+		Clients: xsync.NewMapOf[chan interface{}](),
 		Console: "",
 	}
 	connector.Processes.Store(process.Name, process)
@@ -177,16 +177,8 @@ func (connector *Connector) AddProcess(proc *Process) {
 						process.Console = strings.Join(truncate[len(truncate)-2500:], "\n")
 					}
 					process.Console = process.Console + "\n" + m
-					process.Clients.Range(func(key string, connection chan []byte) bool {
-						message, err := json.Marshal(struct {
-							Type string `json:"type"`
-							Data string `json:"data"`
-						}{"output", m})
-						if err != nil {
-							log.Println("Error in "+process.Name+" console!", err)
-						} else {
-							connection <- message
-						}
+					process.Clients.Range(func(key string, connection chan interface{}) bool {
+						connection <- m
 						return true
 					})
 				})()
@@ -449,19 +441,18 @@ func (connector *Connector) registerMiscRoutes() {
 		if err == nil {
 			connector.Info("server.console.access", "ip", GetIP(r), "user", user, "server", id)
 			defer c.Close()
-			// Setup deadlines.
-			limit := 30 * time.Second
+			// Setup WebSocket limits.
+			timeout := 30 * time.Second
 			c.SetReadLimit(1024 * 1024) // Limit WebSocket reads to 1 MB.
-			c.SetReadDeadline(time.Now().Add(limit))
-			c.SetPongHandler(func(string) error { c.SetReadDeadline(time.Now().Add(limit)); return nil })
-			// If v2, send settings.
+			// If v2, send settings and set read deadline.
 			if v2 {
+				c.SetReadDeadline(time.Now().Add(timeout))
 				c.WriteJSON(struct { // skipcq GSC-G104
 					Type string `json:"type"`
 				}{"settings"})
 			}
 			// Use a channel to synchronise all writes to the WebSocket.
-			writeChannel := make(chan []byte, 8)
+			writeChannel := make(chan interface{}, 8)
 			defer close(writeChannel)
 			go (func() {
 				for {
@@ -472,22 +463,30 @@ func (connector *Connector) registerMiscRoutes() {
 						c.Close()
 						break
 					}
-					c.WriteMessage(websocket.TextMessage, data) // skipcq GSC-G104
+					c.SetWriteDeadline(time.Now().Add(timeout)) // Set write deadline esp for v1 connections.
+					str, ok := data.(string)
+					if ok && v2 {
+						json, err := json.Marshal(struct {
+							Type string `json:"type"`
+							Data string `json:"data"`
+						}{"output", str})
+						if err != nil {
+							log.Println("Error in "+process.Name+" console!", err)
+						} else {
+							c.WriteMessage(websocket.TextMessage, json) // skipcq GSC-G104
+						}
+					} else if ok {
+						c.WriteMessage(websocket.TextMessage, []byte(str)) // skipcq GSC-G104
+					} else {
+						c.WriteMessage(websocket.TextMessage, data.([]byte)) // skipcq GSC-G104
+					}
 				}
 			})()
 			// Add connection to the process after sending current console output.
 			(func() {
 				process.ConsoleLock.RLock()
 				defer process.ConsoleLock.RUnlock()
-				message, err := json.Marshal(struct {
-					Type string `json:"type"`
-					Data string `json:"data"`
-				}{"output", process.Console})
-				if err != nil {
-					log.Println("Error in "+process.Name+" console!", err)
-				} else {
-					writeChannel <- message
-				}
+				writeChannel <- process.Console
 				process.Clients.Store(token, writeChannel)
 			})()
 			// Read messages from the user and execute them.
@@ -503,8 +502,8 @@ func (connector *Connector) registerMiscRoutes() {
 					process.Clients.Delete(token)
 					break // The WebSocket connection has terminated.
 				}
-				c.SetReadDeadline(time.Now().Add(limit)) // Update read deadline.
 				if v2 {
+					c.SetReadDeadline(time.Now().Add(timeout)) // Update read deadline.
 					var data map[string]string
 					err := json.Unmarshal(message, &data)
 					if err == nil {
@@ -582,7 +581,7 @@ func (connector *Connector) UpdateConfig(config *Config) {
 		} else {
 			if value, loaded := connector.Processes.LoadAndDelete(key); loaded { // Yes, this is safe.
 				value.KillProcess() // Other goroutines will cleanup.
-				value.Clients.Range(func(key string, ws chan []byte) bool {
+				value.Clients.Range(func(key string, ws chan interface{}) bool {
 					ws <- nil
 					return true
 				})
