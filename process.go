@@ -96,7 +96,6 @@ func (process *Process) StopProcess() {
 	// SIGTERM works with: Java, Node, npm, yarn v1, yarn v2, PaperMC, Velocity, BungeeCord, Waterfall
 	// SIGINT fails with yarn v1 and v2, hence is not used.
 	command.Process.Signal(syscall.SIGTERM)
-	process.Online = 0
 }
 
 // KillProcess stops the process.
