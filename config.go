@@ -5,6 +5,7 @@ import "encoding/json"
 // Config is the main config for Octyne.
 type Config struct {
 	Port    uint16                  `json:"port"`
+	UDS     UDSConfig               `json:"uds"`
 	HTTPS   HTTPSConfig             `json:"https"`
 	Redis   RedisConfig             `json:"redis"`
 	Logging LoggingConfig           `json:"logging"`
@@ -13,6 +14,9 @@ type Config struct {
 
 var defaultConfig = Config{
 	Port: 42069,
+	UDS: UDSConfig{
+		Enabled: true,
+	},
 	Logging: LoggingConfig{
 		Enabled: true,
 		Path:    "logs",
@@ -40,6 +44,21 @@ type HTTPSConfig struct {
 	Enabled bool   `json:"enabled"`
 	Cert    string `json:"cert"`
 	Key     string `json:"key"`
+}
+
+// UDSConfig contains whether or not UDS is enabled, and if so, path to the UDS socket.
+type UDSConfig struct {
+	Enabled  bool   `json:"enabled"`
+	Location string `json:"location"`
+}
+
+// UnmarshalJSON unmarshals UDSConfig and sets default values.
+func (c *UDSConfig) UnmarshalJSON(data []byte) error {
+	type alias UDSConfig // Prevent recursive calls to UnmarshalJSON.
+	conf := alias{Enabled: true}
+	err := json.Unmarshal(data, &conf)
+	*c = UDSConfig(conf)
+	return err
 }
 
 // ServerConfig is the config for individual servers.

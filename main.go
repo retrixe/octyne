@@ -3,9 +3,11 @@ package main
 import (
 	"encoding/json"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"syscall"
 	"time"
@@ -87,6 +89,31 @@ func main() {
 		Addr:              port,
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
+	}
+
+	// Begin listening on UDS, then HTTP/HTTPS.
+	if config.UDS.Enabled {
+		loc := filepath.Join(os.TempDir(), "octyne.sock."+port[1:])
+		if config.UDS.Location != "" {
+			loc = config.UDS.Location
+		}
+		err = os.RemoveAll(loc)
+		if err != nil {
+			log.Println("Error when listening on UDS socket!", err)
+			return
+		}
+		listener, err := net.Listen("unix", loc)
+		if err != nil {
+			log.Println("Error when listening on UDS socket!", err)
+			return
+		}
+		go (func() {
+			defer server.Close()
+			err = server.Serve(listener)
+			if err != nil {
+				log.Println("Error when listening on UDS socket!", err)
+			}
+		})()
 	}
 
 	// Handle common process-killing signals so we can gracefully shut down:

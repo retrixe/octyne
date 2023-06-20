@@ -35,6 +35,10 @@ Used to configure the apps Octyne should start, Redis-based authentication for a
 ```json
 {
   "port": 42069, // optional, default is 42069
+  "uds": {
+    "enabled": true, // enables Unix socket API for auth-less local actions, used by octynectl
+    "location": "" // optional, default is /tmp/octyne.sock.PORT, specifying this overrides defaults
+  },
   "redis": {
     "enabled": false, // whether the authentication tokens should sync to Redis for more than 1 node
     "url": "redis://localhost" // link to Redis server

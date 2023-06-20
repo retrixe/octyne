@@ -18,6 +18,10 @@ func NewMemoryAuthenticator() Authenticator {
 
 // Validate is called on an HTTP API request and checks whether or not the user is authenticated.
 func (a *MemoryAuthenticator) Validate(w http.ResponseWriter, r *http.Request) string {
+	if r.RemoteAddr == "@" {
+		return "unix:local"
+	}
+
 	token := GetTokenFromRequest(r)
 	if !isValidToken(token) {
 		http.Error(w, "{\"error\": \"You are not authenticated to access this resource!\"}",
