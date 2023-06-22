@@ -590,5 +590,5 @@ func (connector *Connector) UpdateConfig(config *Config) {
 		}
 		return true
 	})
-	// TODO: Reload HTTP server, mark server for deletion instead of instantly deleting them.
+	// TODO: Reload HTTP/Unix socket server, mark server for deletion instead of instantly deleting them.
 }
