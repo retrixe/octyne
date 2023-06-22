@@ -5,7 +5,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/gorilla/handlers"
@@ -54,8 +56,16 @@ func main() {
 
 	// Setup daemon connector.
 	connector := InitializeConnector(&config)
-	defer connector.Logger.Zap.Sync()
-	defer os.Exit(1)
+	exitCode := 1
+	defer (func() {
+		if err := connector.Authenticator.Close(); err != nil {
+			log.Println("Error when closing the authenticator!", err)
+		} else if err := connector.Logger.Zap.Sync(); err != nil {
+			log.Println("Error when syncing the logger!", err)
+		}
+		// TODO: connector.Processes.Range(func(key string, value *managedProcess) bool { value.StopProcess() })
+		os.Exit(exitCode)
+	})()
 
 	// Run processes, passing the daemon connector.
 	for _, name := range servers {
@@ -78,14 +88,23 @@ func main() {
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
+
+	// Handle common process-killing signals so we can gracefully shut down:
+	sigc := make(chan os.Signal, 1)
+	signal.Notify(sigc, os.Interrupt, syscall.SIGTERM) // os.KILL
+	go func(c chan os.Signal) {
+		sig := <-c
+		log.Printf("Caught signal %s: shutting down.", sig)
+		exitCode = 0
+		server.Close() // Close the HTTP server, then call the defer in main()
+	}(sigc)
+
 	if !config.HTTPS.Enabled {
 		err = server.ListenAndServe()
 	} else {
 		err = server.ListenAndServeTLS(config.HTTPS.Cert, config.HTTPS.Key)
 	}
-	// Close the authenticator.
-	if authenticatorErr := connector.Authenticator.Close(); authenticatorErr != nil {
-		log.Println("Error when closing the authenticator!", authenticatorErr)
+	if err != nil && err != http.ErrServerClosed {
+		log.Println("Error when listening on port "+port+"!", err) // skipcq: GO-S0904
 	}
-	log.Println(err) // skipcq: GO-S0904
 }
