@@ -2,7 +2,7 @@
 
 A process manager with an HTTP API for remote console and file access.
 
-Octyne allows running multiple apps on a remote server and providing an HTTP API to manage them. This allows for hosting web servers, game servers, bots and so on on remote servers without having to mess with SSH, using `screen` and `systemd` whenever you want to make any change, in a highly manageable and secure way.
+Octyne allows running multiple apps on a remote server and provides an HTTP API to manage them. This allows for hosting web servers, game servers, bots and so on on remote servers without having to mess with SSH, using `screen` and `systemd` whenever you want to make any change, in a highly manageable and secure way.
 
 It incorporates the ability to manage files and access the terminal output and input over HTTP remotely. For further security, it is recommended to use HTTPS (see [config.json](#configjson)) to ensure end-to-end secure transmission.
 
@@ -14,7 +14,7 @@ It incorporates the ability to manage files and access the terminal output and i
 - Place octyne in a folder, and run `chmod +x <octyne file name>` to mark it as executable if using macOS/Linux/*nix-like.
 - Follow the steps [here](https://github.com/retrixe/octyne#configuration) to configure Octyne correctly.
 - Run `./<octyne file name>` (`.\<octyne file name>.exe` on Windows) in a terminal in the folder to start Octyne. Alternatively, on Windows/Linux desktops, you can double click the file (on Linux, select `Run in Terminal`, else it will run in the background).
-- You may want to get [Ecthelion](https://github.com/retrixe/ecthelion) as aforementioned in the description, as a web app to manage Octyne.
+- You may want to get [Ecthelion](https://github.com/retrixe/ecthelion) as aforementioned in the description, as a web app to manage Octyne, and [octynectl](https://github.com/retrixe/octynectl) as a CLI tool to manage Octyne locally on your machine.
 
 ### Usage
 
@@ -28,13 +28,17 @@ Octyne depends on two files in the same directory to get configuration from. Not
 
 ### config.json
 
-Used to configure the apps Octyne should start, Redis-based authentication for allowing more than a single node and HTTPS support. A reverse proxy can also be used for HTTPS if it supports WSS.
+Used to configure the apps Octyne should start, Redis-based authentication for allowing more than a single node, Unix socket API, and HTTPS support. A reverse proxy can also be used for HTTPS if it supports WSS.
 
 *NOTE: Remove the comments when creating the file as JSON does not support comments!*
 
 ```json
 {
   "port": 42069, // optional, default is 42069
+  "unixSocket": {
+    "enabled": true, // enables Unix socket API for auth-less actions by locally running apps e.g. octynectl
+    "location": "" // optional, if empty/absent, default is TMP/octyne.sock.PORT (see API.md for details)
+  },
   "redis": {
     "enabled": false, // whether the authentication tokens should sync to Redis for more than 1 node
     "url": "redis://localhost" // link to Redis server
@@ -68,6 +72,8 @@ Contains users who can log into Octyne. Use a secure method to hash your passwor
   "username": "password hashed with SHA-256"
 }
 ```
+
+Note: actions performed locally using the Unix socket API by apps like [octynectl](https://github.com/retrixe/octynectl) are logged as being performed by the `@local` user, avoid using this username. Apps running on your PC under the same user as Octyne can use this API without a username or password.
 
 ### Logging
 

@@ -33,6 +33,10 @@ type ReplaceableAuthenticator struct {
 
 // Validate is called on an HTTP API request and checks whether or not the user is authenticated.
 func (a *ReplaceableAuthenticator) Validate(w http.ResponseWriter, r *http.Request) string {
+	if r.RemoteAddr == "@" {
+		return "@local"
+	}
+
 	a.EngineMutex.RLock()
 	defer a.EngineMutex.RUnlock()
 	return a.Engine.Validate(w, r)

@@ -3,9 +3,11 @@ package main
 import (
 	"encoding/json"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"syscall"
 	"time"
@@ -89,6 +91,36 @@ func main() {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
+	// Begin listening on TCP and Unix socket, then begin serving HTTP requests.
+	tcpListener, err := net.Listen("tcp", port)
+	if err != nil {
+		log.Println("Error when listening on port "+port+"!", err)
+		return
+	}
+	if config.UnixSocket.Enabled {
+		loc := filepath.Join(os.TempDir(), "octyne.sock."+port[1:])
+		if config.UnixSocket.Location != "" {
+			loc = config.UnixSocket.Location
+		}
+		err = os.RemoveAll(loc)
+		if err != nil {
+			log.Println("Error when unlinking Unix socket at "+loc+"!", err)
+			return
+		}
+		unixListener, err := net.Listen("unix", loc) // This unlinks the socket when closed by Serve().
+		if err != nil {
+			log.Println("Error when listening on Unix socket at "+loc+"!", err)
+			return
+		}
+		go (func() {
+			defer server.Close() // Close the TCP server if the Unix socket server fails.
+			err = server.Serve(unixListener)
+			if err != nil && err != http.ErrServerClosed {
+				log.Println("Error when serving Unix socket requests!", err)
+			}
+		})()
+	}
+
 	// Handle common process-killing signals so we can gracefully shut down:
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, os.Interrupt, syscall.SIGTERM) // os.KILL
@@ -96,15 +128,16 @@ func main() {
 		sig := <-c
 		log.Printf("Caught signal %s: shutting down.", sig)
 		exitCode = 0
-		server.Close() // Close the HTTP server, then call the defer in main()
+		server.Close() // Close both servers, then call the defers in main()
 	}(sigc)
 
+	defer server.Close() // Close the Unix socket server if the TCP server fails.
 	if !config.HTTPS.Enabled {
-		err = server.ListenAndServe()
+		err = server.Serve(tcpListener)
 	} else {
-		err = server.ListenAndServeTLS(config.HTTPS.Cert, config.HTTPS.Key)
+		err = server.ServeTLS(tcpListener, config.HTTPS.Cert, config.HTTPS.Key)
 	}
 	if err != nil && err != http.ErrServerClosed {
-		log.Println("Error when listening on port "+port+"!", err) // skipcq: GO-S0904
+		log.Println("Error when serving HTTP requests!", err) // skipcq: GO-S0904
 	}
 }

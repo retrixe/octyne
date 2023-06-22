@@ -4,15 +4,19 @@ import "encoding/json"
 
 // Config is the main config for Octyne.
 type Config struct {
-	Port    uint16                  `json:"port"`
-	HTTPS   HTTPSConfig             `json:"https"`
-	Redis   RedisConfig             `json:"redis"`
-	Logging LoggingConfig           `json:"logging"`
-	Servers map[string]ServerConfig `json:"servers"`
+	Port       uint16                  `json:"port"`
+	UnixSocket UnixSocketConfig        `json:"unixSocket"`
+	HTTPS      HTTPSConfig             `json:"https"`
+	Redis      RedisConfig             `json:"redis"`
+	Logging    LoggingConfig           `json:"logging"`
+	Servers    map[string]ServerConfig `json:"servers"`
 }
 
 var defaultConfig = Config{
 	Port: 42069,
+	UnixSocket: UnixSocketConfig{
+		Enabled: true,
+	},
 	Logging: LoggingConfig{
 		Enabled: true,
 		Path:    "logs",
@@ -40,6 +44,21 @@ type HTTPSConfig struct {
 	Enabled bool   `json:"enabled"`
 	Cert    string `json:"cert"`
 	Key     string `json:"key"`
+}
+
+// UnixSocketConfig contains whether or not Unix socket is enabled, and if so, path to socket.
+type UnixSocketConfig struct {
+	Enabled  bool   `json:"enabled"`
+	Location string `json:"location"`
+}
+
+// UnmarshalJSON unmarshals UnixSocketConfig and sets default values.
+func (c *UnixSocketConfig) UnmarshalJSON(data []byte) error {
+	type alias UnixSocketConfig // Prevent recursive calls to UnmarshalJSON.
+	conf := alias{Enabled: true}
+	err := json.Unmarshal(data, &conf)
+	*c = UnixSocketConfig(conf)
+	return err
 }
 
 // ServerConfig is the config for individual servers.
