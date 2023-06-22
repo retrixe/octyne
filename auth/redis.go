@@ -35,7 +35,7 @@ func NewRedisAuthenticator(url string) *RedisAuthenticator {
 // Validate is called on an HTTP API request and checks whether or not the user is authenticated.
 func (a *RedisAuthenticator) Validate(w http.ResponseWriter, r *http.Request) string {
 	if r.RemoteAddr == "@" {
-		return "unix:local"
+		return "@local"
 	}
 
 	token := GetTokenFromRequest(r)

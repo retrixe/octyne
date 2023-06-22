@@ -1,5 +1,13 @@
 # Octyne API Documentation
 
+Octyne provides a REST API for interacting with the server (listening on port 42069 by default, but configurable). This API is used by the [Ecthelion web interface](https://github.com/retrixe/ecthelion) and can be used by other applications to interact with Octyne.
+
+## Unix Socket API
+
+Octyne provides a Unix socket API on Windows 10+ and Unix-like systems which is located by default at `TEMPDIR/octyne.sock.PORT`, where `TEMPDIR` is retrieved from <https://pkg.go.dev/os#TempDir> and `PORT` is the port specified in the config (the default is 42069). If using an older version of Windows, the Unix socket API will be unavailable.
+
+This API is identical to the REST API in usage, with the same endpoints/params/etc. You can send HTTP requests to this API without requiring token authentication, only necessary system user/group privileges, which is useful for local actions performed by applications like [octynectl](https://github.com/retrixe/octynectl). Actions performed through the Unix socket API are logged as being performed by the `@local` user.
+
 ## Authentication
 
 Retrieve a token using the [GET /login](#get-login) endpoint and store it safely. You can then pass this token to all subsequent requests to Octyne in the `Authorization` header or as an `X-Authentication` cookie.
