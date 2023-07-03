@@ -41,6 +41,10 @@ func main() {
 	if err != nil {
 		panic("An error occurred while attempting to read config! " + err.Error())
 	}
+	contents, err = StripLineCommentsFromJSON(contents)
+	if err != nil {
+		panic("An error occurred while attempting to read config! " + err.Error())
+	}
 	err = json.Unmarshal(contents, &config)
 	if err != nil {
 		panic("An error occurred while attempting to read config! " + err.Error())

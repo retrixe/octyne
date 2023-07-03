@@ -30,7 +30,7 @@ Octyne depends on two files in the same directory to get configuration from. Not
 
 Used to configure the apps Octyne should start, Redis-based authentication for allowing more than a single node, Unix socket API, and HTTPS support. A reverse proxy can also be used for HTTPS if it supports WSS.
 
-*NOTE: Remove the comments when creating the file as JSON does not support comments!*
+*NOTE: Octyne supports comments and trailing commas in the config.json file, they don't need to be removed.*
 
 ```json
 {

@@ -1,6 +1,19 @@
 package main
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"github.com/tailscale/hujson"
+)
+
+func StripLineCommentsFromJSON(json []byte) ([]byte, error) {
+	ast, err := hujson.Parse(json)
+	if err != nil {
+		return nil, err
+	}
+	ast.Standardize()
+	return ast.Pack(), nil
+}
 
 // Config is the main config for Octyne.
 type Config struct {
