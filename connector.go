@@ -225,14 +225,15 @@ func (connector *Connector) registerMiscRoutes() {
 			connector.Info("config.view", "ip", GetIP(r), "user", user)
 			fmt.Fprintln(w, string(contents))
 		} else if r.Method == "PATCH" {
-			var buf bytes.Buffer
-			_, err := buf.ReadFrom(r.Body)
+			var buffer bytes.Buffer
+			_, err := buffer.ReadFrom(r.Body)
 			if err != nil {
 				httpError(w, "Failed to read body!", http.StatusBadRequest)
 				return
 			}
+			var origJson = buffer.String()
 			var config Config
-			contents, err := StripLineCommentsFromJSON(buf.Bytes())
+			contents, err := StripLineCommentsFromJSON(buffer.Bytes())
 			if err != nil {
 				httpError(w, "Invalid JSON body!", http.StatusBadRequest)
 				return
@@ -242,7 +243,7 @@ func (connector *Connector) registerMiscRoutes() {
 				httpError(w, "Invalid JSON body!", http.StatusBadRequest)
 				return
 			}
-			err = os.WriteFile("config.json~", []byte(strings.TrimRight(buf.String(), "\n")+"\n"), 0666)
+			err = os.WriteFile("config.json~", []byte(strings.TrimRight(origJson, "\n")+"\n"), 0666)
 			if err != nil {
 				log.Println("Error writing to config.json when user modified config!")
 				httpError(w, "Internal Server Error!", http.StatusInternalServerError)
