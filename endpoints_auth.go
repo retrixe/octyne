@@ -21,6 +21,10 @@ func (connector *Connector) registerAuthRoutes() {
 		Token string `json:"token"`
 	}
 	connector.Router.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
+		if r.RemoteAddr == "@" {
+			httpError(w, "Auth endpoints cannot be called over Unix socket!", http.StatusBadRequest)
+			return
+		}
 		// In case the username and password headers don't exist.
 		username := r.Header.Get("Username")
 		password := r.Header.Get("Password")
@@ -60,6 +64,10 @@ func (connector *Connector) registerAuthRoutes() {
 
 	// GET /logout
 	connector.Router.HandleFunc("/logout", func(w http.ResponseWriter, r *http.Request) {
+		if r.RemoteAddr == "@" {
+			httpError(w, "Auth endpoints cannot be called over Unix socket!", http.StatusBadRequest)
+			return
+		}
 		// Check with authenticator.
 		user := connector.Validate(w, r)
 		if user == "" {
@@ -92,6 +100,10 @@ func (connector *Connector) registerAuthRoutes() {
 
 	// GET /ott
 	connector.Router.HandleFunc("/ott", func(w http.ResponseWriter, r *http.Request) {
+		if r.RemoteAddr == "@" {
+			httpError(w, "Auth endpoints cannot be called over Unix socket!", http.StatusBadRequest)
+			return
+		}
 		// Check with authenticator.
 		user := connector.Validate(w, r)
 		if user == "" {
