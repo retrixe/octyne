@@ -50,6 +50,7 @@ type HTTPSConfig struct {
 type UnixSocketConfig struct {
 	Enabled  bool   `json:"enabled"`
 	Location string `json:"location"`
+	Group    string `json:"group"`
 }
 
 // UnmarshalJSON unmarshals UnixSocketConfig and sets default values.

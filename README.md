@@ -37,7 +37,8 @@ Used to configure the apps Octyne should start, Redis-based authentication for a
   "port": 42069, // optional, default is 42069
   "unixSocket": {
     "enabled": true, // enables Unix socket API for auth-less actions by locally running apps e.g. octynectl
-    "location": "" // optional, if empty/absent, default is TMP/octyne.sock.PORT (see API.md for details)
+    "location": "", // optional, if absent, default is TMP/octyne.sock.PORT (see API.md for details)
+    "group": "" // optional, sets the socket's group owner, if absent, default is current user's primary group
   },
   "redis": {
     "enabled": false, // whether the authentication tokens should sync to Redis for more than 1 node

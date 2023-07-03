@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"os/user"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"syscall"
 	"time"
@@ -111,6 +113,27 @@ func main() {
 		if err != nil {
 			log.Println("Error when listening on Unix socket at "+loc+"!", err)
 			return
+		}
+		if config.UnixSocket.Group != "" {
+			if runtime.GOOS == "windows" {
+				log.Println("Error: Assigning Unix sockets to groups is not supported on Windows!")
+				return
+			}
+			group, err := user.LookupGroup(config.UnixSocket.Group)
+			if err != nil {
+				log.Println("Error when looking up Unix socket group owner: "+config.UnixSocket.Group, err)
+				return
+			}
+			gid, err := strconv.Atoi(group.Gid)
+			if err != nil {
+				log.Println("Error when getting Unix socket group owner '"+config.UnixSocket.Group+"' GID!", err)
+				return
+			}
+			err = os.Chown(loc, -1, gid)
+			if err != nil {
+				log.Println("Error when changing Unix socket group ownership to '"+config.UnixSocket.Group+"'!", err)
+				return
+			}
 		}
 		go (func() {
 			defer server.Close() // Close the TCP server if the Unix socket server fails.
