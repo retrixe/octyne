@@ -225,26 +225,24 @@ func (connector *Connector) registerMiscRoutes() {
 			connector.Info("config.view", "ip", GetIP(r), "user", user)
 			fmt.Fprintln(w, string(contents))
 		} else if r.Method == "PATCH" {
-			var buffer bytes.Buffer
-			_, err := buffer.ReadFrom(r.Body)
+			var buf bytes.Buffer
+			_, err := buf.ReadFrom(r.Body)
 			if err != nil {
 				httpError(w, "Failed to read body!", http.StatusBadRequest)
 				return
 			}
 			var config Config
-			err = json.Unmarshal(buffer.Bytes(), &config)
+			contents, err := StripLineCommentsFromJSON(buf.Bytes())
 			if err != nil {
 				httpError(w, "Invalid JSON body!", http.StatusBadRequest)
 				return
 			}
-			// Clean up the config once.
-			configJson, err := json.MarshalIndent(config, "", "  ")
+			err = json.Unmarshal(contents, &config)
 			if err != nil {
-				log.Println("Error serialising config.json when user modified config!")
-				httpError(w, "Internal Server Error!", http.StatusInternalServerError)
+				httpError(w, "Invalid JSON body!", http.StatusBadRequest)
 				return
 			}
-			err = os.WriteFile("config.json~", []byte(string(configJson)+"\n"), 0666)
+			err = os.WriteFile("config.json~", []byte(strings.TrimRight(buf.String(), "\n")+"\n"), 0666)
 			if err != nil {
 				log.Println("Error writing to config.json when user modified config!")
 				httpError(w, "Internal Server Error!", http.StatusInternalServerError)
@@ -272,6 +270,12 @@ func (connector *Connector) registerMiscRoutes() {
 		// Read the new config.
 		var config Config
 		contents, err := os.ReadFile("config.json")
+		if err != nil {
+			log.Println("An error occurred while attempting to read config! " + err.Error())
+			httpError(w, "An error occurred while reading config!", http.StatusInternalServerError)
+			return
+		}
+		contents, err = StripLineCommentsFromJSON(contents)
 		if err != nil {
 			log.Println("An error occurred while attempting to read config! " + err.Error())
 			httpError(w, "An error occurred while reading config!", http.StatusInternalServerError)

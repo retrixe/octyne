@@ -32,7 +32,7 @@ Used to configure the apps Octyne should start, Redis-based authentication for a
 
 *NOTE: Octyne supports comments and trailing commas in the config.json file, they don't need to be removed.*
 
-```json
+```jsonc
 {
   "port": 42069, // optional, default is 42069
   "unixSocket": {
