@@ -127,7 +127,7 @@ func InitializeConnector(config *Config) *Connector {
 		PATCH /accounts
 		DELETE /accounts?username=username
 
-		GET /servers
+		GET /servers?extrainfo_unstable=true/false
 
 		GET /server/{id} (statistics like uptime, CPU and RAM)
 		POST /server/{id} (to start and stop a server)
@@ -258,6 +258,7 @@ func (connector *Connector) registerMiscRoutes() {
 			connector.UpdateConfig(&config)
 			connector.Info("config.edit", "ip", GetIP(r), "user", user, "newConfig", config)
 			fmt.Fprintln(w, "{\"success\":true}")
+			info.Println("Config updated remotely by user over HTTP API (see action logs for info)!")
 		}
 	})
 
@@ -309,6 +310,10 @@ func (connector *Connector) registerMiscRoutes() {
 		processes := make(map[string]int)
 		connector.Processes.Range(func(k string, v *managedProcess) bool {
 			processes[v.Name] = v.Online
+			// TODO: unstable API! no semver guarantees!
+			if v.ToDelete.Load() && r.URL.Query().Get("extrainfo_unstable") == "true" {
+				processes[v.Name] += 10
+			}
 			return true
 		})
 		// Send the list.
@@ -323,6 +328,7 @@ func (connector *Connector) registerMiscRoutes() {
 		MemoryUsage float64 `json:"memoryUsage"`
 		TotalMemory int64   `json:"totalMemory"`
 		Uptime      int64   `json:"uptime"`
+		ToDelete    bool    `json:"toDelete,omitempty"`
 	}
 	totalMemory := int64(system.GetTotalSystemMemory())
 	connector.Router.HandleFunc("/server/{id}", func(w http.ResponseWriter, r *http.Request) {
@@ -353,7 +359,7 @@ func (connector *Connector) registerMiscRoutes() {
 			if operation == "START" {
 				// Start process if required.
 				if process.Online != 1 {
-					err = process.StartProcess()
+					err = process.StartProcess(connector)
 					connector.Info("server.start", "ip", GetIP(r), "user", user, "server", id)
 				}
 				// Send a response.
@@ -409,6 +415,7 @@ func (connector *Connector) registerMiscRoutes() {
 				CPUUsage:    stat.CPUUsage,
 				MemoryUsage: stat.RSSMemory,
 				TotalMemory: totalMemory,
+				ToDelete:    process.ToDelete.Load(),
 			}
 			json.NewEncoder(w).Encode(res) // skipcq GSC-G104
 		} else {
@@ -583,17 +590,11 @@ func (connector *Connector) UpdateConfig(config *Config) {
 			value.Process.ServerConfigMutex.Lock()
 			defer value.Process.ServerConfigMutex.Unlock()
 			value.Process.ServerConfig = serverConfig
+			value.ToDelete.Swap(false)
 		} else {
-			if value, loaded := connector.Processes.LoadAndDelete(key); loaded { // Yes, this is safe.
-				value.KillProcess() // Other goroutines will cleanup.
-				value.Clients.Range(func(key string, ws chan interface{}) bool {
-					ws <- nil
-					return true
-				})
-				value.Clients.Clear()
-			}
+			value.ToDelete.Swap(true)
 		}
 		return true
 	})
-	// TODO: Reload HTTP/Unix socket server, mark server for deletion instead of instantly deleting them.
+	// TODO: Reload HTTP/Unix socket server.
 }

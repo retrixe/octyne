@@ -10,22 +10,25 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
 
 // Process defines a process running in octyne.
+// HIGH-TODO: accesses to Online, Crashes, Uptime and Stdin are not concurrent safe presently!
 type Process struct {
 	ServerConfigMutex sync.RWMutex
 	ServerConfig
-	Name    string
-	Command *exec.Cmd
-	Online  int // 0 for offline, 1 for online, 2 for failure
-	Output  *io.PipeReader
-	Input   *io.PipeWriter
-	Stdin   io.WriteCloser
-	Crashes int
-	Uptime  int64
+	Name     string
+	Command  *exec.Cmd
+	Online   int // 0 for offline, 1 for online, 2 for failure
+	Output   *io.PipeReader
+	Input    *io.PipeWriter
+	Stdin    io.WriteCloser
+	Crashes  int
+	Uptime   int64
+	ToDelete atomic.Bool
 }
 
 // CreateProcess creates and runs a process.
@@ -43,14 +46,14 @@ func CreateProcess(name string, config ServerConfig, connector *Connector) *Proc
 	}
 	// Run the command.
 	if config.Enabled {
-		process.StartProcess() // Error is handled by StartProcess: skipcq GSC-G104
+		process.StartProcess(connector) // Error is handled by StartProcess: skipcq GSC-G104
 	}
 	connector.AddProcess(process)
 	return process
 }
 
 // StartProcess starts the process.
-func (process *Process) StartProcess() error {
+func (process *Process) StartProcess(connector *Connector) error {
 	name := process.Name
 	info.Println("Starting process (" + name + ")")
 	process.ServerConfigMutex.RLock()
@@ -84,7 +87,7 @@ func (process *Process) StartProcess() error {
 	}
 	// Update and return.
 	process.Command = command
-	go process.MonitorProcess()
+	go process.MonitorProcess(connector)
 	return err
 }
 
@@ -118,7 +121,7 @@ func (process *Process) SendConsoleOutput(command string) {
 }
 
 // MonitorProcess monitors the process and automatically marks it as offline/online.
-func (process *Process) MonitorProcess() error {
+func (process *Process) MonitorProcess(connector *Connector) error {
 	defer (func() {
 		if e := recover(); e != nil {
 			log.Println(e) // In case of nil pointer exception. skipcq GO-S0904
@@ -131,7 +134,18 @@ func (process *Process) MonitorProcess() error {
 	// Wait for the command to finish execution.
 	err := process.Command.Wait()
 	// Mark as offline appropriately.
-	if process.Command.ProcessState.Success() ||
+	if process.ToDelete.Load() {
+		process.SendConsoleOutput("[Octyne] Server " + process.Name + " was marked for deletion, " +
+			"stopped/crashed, and has now been removed.")
+		if managedProcess, loaded := connector.Processes.LoadAndDelete(process.Name); loaded {
+			<-time.After(5 * time.Second)
+			managedProcess.Clients.Range(func(key string, ws chan interface{}) bool {
+				ws <- nil
+				return true
+			})
+			managedProcess.Clients.Clear()
+		}
+	} else if process.Command.ProcessState.Success() ||
 		process.Online == 0 /* SIGKILL (if done by Octyne) */ ||
 		process.Command.ProcessState.ExitCode() == 130 /* SIGINT */ ||
 		process.Command.ProcessState.ExitCode() == 143 /* SIGTERM */ {
@@ -148,7 +162,7 @@ func (process *Process) MonitorProcess() error {
 		info.Println("Server " + process.Name + " has crashed!")
 		if process.Crashes <= 3 {
 			process.SendConsoleOutput("[Octyne] Restarting server " + process.Name + " due to default behaviour.")
-			process.StartProcess()
+			process.StartProcess(connector)
 		}
 	}
 	return err
