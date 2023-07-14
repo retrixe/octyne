@@ -311,11 +311,11 @@ func (connector *Connector) registerMiscRoutes() {
 		connector.Processes.Range(func(k string, v *managedProcess) bool {
 			if r.URL.Query().Get("extrainfo") == "true" {
 				processes[v.Name] = map[string]interface{}{
-					"online":   v.Online,
+					"online":   v.Online.Load(),
 					"toDelete": v.ToDelete.Load(),
 				}
 			} else {
-				processes[v.Name] = v.Online
+				processes[v.Name] = v.Online.Load()
 			}
 			return true
 		})
@@ -361,7 +361,7 @@ func (connector *Connector) registerMiscRoutes() {
 			// Check whether the operation is correct or not.
 			if operation == "START" {
 				// Start process if required.
-				if process.Online != 1 {
+				if process.Online.Load() != 1 {
 					err = process.StartProcess(connector)
 					connector.Info("server.start", "ip", GetIP(r), "user", user, "server", id)
 				}
@@ -371,7 +371,7 @@ func (connector *Connector) registerMiscRoutes() {
 				json.NewEncoder(w).Encode(res) // skipcq GSC-G104
 			} else if operation == "STOP" || operation == "KILL" || operation == "TERM" {
 				// Stop process if required.
-				if process.Online == 1 {
+				if process.Online.Load() == 1 {
 					// Octyne 2.x should drop STOP or move it to SIGTERM.
 					if operation == "KILL" || operation == "STOP" {
 						process.KillProcess()
@@ -393,10 +393,12 @@ func (connector *Connector) registerMiscRoutes() {
 		} else if r.Method == "GET" {
 			// Get the PID of the process.
 			var stat system.ProcessStats
+			process.CommandMutex.RLock()
+			defer process.CommandMutex.RUnlock()
 			if process.Command != nil &&
 				process.Command.Process != nil &&
-				process.Command.ProcessState == nil &&
-				process.Online == 1 {
+				// Command.ProcessState == nil && // ProcessState isn't mutexed, the next if should suffice
+				process.Online.Load() == 1 {
 				// Get CPU usage and memory usage of the process.
 				var err error
 				stat, err = system.GetProcessStats(process.Command.Process.Pid)
@@ -408,12 +410,12 @@ func (connector *Connector) registerMiscRoutes() {
 			}
 
 			// Send a response.
-			uptime := process.Uptime
+			uptime := process.Uptime.Load()
 			if uptime > 0 {
-				uptime = time.Now().UnixNano() - process.Uptime
+				uptime = time.Now().UnixNano() - uptime
 			}
 			res := serverResponse{
-				Status:      process.Online,
+				Status:      int(process.Online.Load()),
 				Uptime:      uptime,
 				CPUUsage:    stat.CPUUsage,
 				MemoryUsage: stat.RSSMemory,

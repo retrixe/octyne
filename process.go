@@ -16,19 +16,19 @@ import (
 )
 
 // Process defines a process running in octyne.
-// HIGH-TODO: accesses to Online, Crashes, Uptime and Stdin are not concurrent safe presently!
 type Process struct {
 	ServerConfigMutex sync.RWMutex
 	ServerConfig
-	Name     string
-	Command  *exec.Cmd
-	Online   int // 0 for offline, 1 for online, 2 for failure
-	Output   *io.PipeReader
-	Input    *io.PipeWriter
-	Stdin    io.WriteCloser
-	Crashes  int
-	Uptime   int64
-	ToDelete atomic.Bool
+	Name         string
+	CommandMutex sync.RWMutex
+	Command      *exec.Cmd
+	Online       atomic.Int32   // 0 for offline, 1 for online, 2 for failure
+	Output       *io.PipeReader // Never change, don't need synchronisation.
+	Input        *io.PipeWriter // Never change, don't need synchronisation.
+	Stdin        io.WriteCloser // Synchronised by CommandMutex.
+	Crashes      atomic.Int32
+	Uptime       atomic.Int64
+	ToDelete     atomic.Bool
 }
 
 // CreateProcess creates and runs a process.
@@ -36,13 +36,13 @@ func CreateProcess(name string, config ServerConfig, connector *Connector) *Proc
 	// Create the process.
 	output, input := io.Pipe()
 	process := &Process{
-		Name:         name,
-		Online:       0,
+		Name: name,
+		//Online:       0,
 		ServerConfig: config,
 		Output:       output,
 		Input:        input,
-		Crashes:      0,
-		Uptime:       0,
+		//Crashes:      0,
+		//Uptime:       0,
 	}
 	// Run the command.
 	if config.Enabled {
@@ -63,12 +63,14 @@ func (process *Process) StartProcess(connector *Connector) error {
 	command := exec.Command(cmd[0], cmd[1:]...)
 	command.Dir = process.Directory
 	// Run the command after retrieving the standard out, standard in and standard err.
+	process.CommandMutex.Lock()
+	defer process.CommandMutex.Unlock()
 	process.Stdin, _ = command.StdinPipe()
 	command.Stdout = process.Input
 	command.Stderr = command.Stdout // We want the stderr and stdout to go to the same pipe.
 	err := command.Start()
 	// Check for errors.
-	process.Online = 2
+	process.Online.Store(2)
 	if err != nil {
 		log.Println("Failed to start server " + name + "! The following error occured: " + err.Error())
 	} else if _, err := os.FindProcess(command.Process.Pid); err != nil /* Windows */ ||
@@ -82,8 +84,8 @@ func (process *Process) StartProcess(connector *Connector) error {
 	} else {
 		info.Println("Started server " + name + " with PID " + strconv.Itoa(command.Process.Pid))
 		process.SendConsoleOutput("[Octyne] Started server " + name)
-		process.Online = 1
-		process.Uptime = time.Now().UnixNano()
+		process.Online.Store(1)
+		process.Uptime.Store(time.Now().UnixNano())
 	}
 	// Update and return.
 	process.Command = command
@@ -95,6 +97,8 @@ func (process *Process) StartProcess(connector *Connector) error {
 func (process *Process) StopProcess() {
 	info.Println("Stopping server " + process.Name)
 	process.SendConsoleOutput("[Octyne] Stopping server " + process.Name)
+	process.CommandMutex.RLock()
+	defer process.CommandMutex.RUnlock()
 	command := process.Command
 	// SIGTERM works with: Java, Node, npm, yarn v1, yarn v2, PaperMC, Velocity, BungeeCord, Waterfall
 	// SIGINT fails with yarn v1 and v2, hence is not used.
@@ -105,13 +109,17 @@ func (process *Process) StopProcess() {
 func (process *Process) KillProcess() {
 	info.Println("Killing server " + process.Name)
 	process.SendConsoleOutput("[Octyne] Killing server " + process.Name)
+	process.CommandMutex.RLock()
+	defer process.CommandMutex.RUnlock()
 	command := process.Command
 	command.Process.Kill()
-	process.Online = 0
+	process.Online.Store(0)
 }
 
 // SendCommand sends an input to stdin of the process.
 func (process *Process) SendCommand(command string) {
+	process.CommandMutex.RLock()
+	defer process.CommandMutex.RUnlock()
 	fmt.Fprintln(process.Stdin, command)
 }
 
@@ -128,6 +136,8 @@ func (process *Process) MonitorProcess(connector *Connector) error {
 		}
 	})()
 	// Exit immediately if there is no process.
+	process.CommandMutex.RLock()
+	defer process.CommandMutex.RUnlock()
 	if process.Command.Process == nil {
 		return nil
 	}
@@ -146,23 +156,23 @@ func (process *Process) MonitorProcess(connector *Connector) error {
 			managedProcess.Clients.Clear()
 		}
 	} else if process.Command.ProcessState.Success() ||
-		process.Online == 0 /* SIGKILL (if done by Octyne) */ ||
+		process.Online.Load() == 0 /* SIGKILL (if done by Octyne) */ ||
 		process.Command.ProcessState.ExitCode() == 130 /* SIGINT */ ||
 		process.Command.ProcessState.ExitCode() == 143 /* SIGTERM */ {
-		process.Online = 0
-		process.Uptime = 0
-		process.Crashes = 0
+		process.Online.Store(0)
+		process.Uptime.Store(0)
+		process.Crashes.Store(0)
 		info.Println("Server " + process.Name + " has stopped.")
 		process.SendConsoleOutput("[Octyne] Server " + process.Name + " has stopped.")
 	} else {
-		process.Online = 2
-		process.Uptime = 0
-		process.Crashes++
+		process.Online.Store(2)
+		process.Uptime.Store(0)
+		crashes := process.Crashes.Add(1)
 		process.SendConsoleOutput("[Octyne] Server " + process.Name + " has crashed!")
 		info.Println("Server " + process.Name + " has crashed!")
-		if process.Crashes <= 3 {
+		if crashes <= 3 {
 			process.SendConsoleOutput("[Octyne] Restarting server " + process.Name + " due to default behaviour.")
-			process.StartProcess(connector)
+			go process.StartProcess(connector) // go'ing here is more convenient than CommandMutex.RUnlock
 		}
 	}
 	return err
