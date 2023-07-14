@@ -127,12 +127,12 @@ func InitializeConnector(config *Config) *Connector {
 		PATCH /accounts
 		DELETE /accounts?username=username
 
-		GET /servers?extrainfo_unstable=true/false
+		GET /servers?extrainfo=true/false
 
 		GET /server/{id} (statistics like uptime, CPU and RAM)
 		POST /server/{id} (to start and stop a server)
 
-		WS /server/{id}/console?ticket=ticket
+		WS /server/{id}/console?ticket=ticket (has console-v2 protocol)
 
 		GET /server/{id}/files?path=path
 		GET /server/{id}/file?path=path&ticket=ticket
@@ -299,7 +299,7 @@ func (connector *Connector) registerMiscRoutes() {
 
 	// GET /servers
 	type serversResponse struct {
-		Servers map[string]int `json:"servers"`
+		Servers map[string]interface{} `json:"servers"`
 	}
 	connector.Router.HandleFunc("/servers", func(w http.ResponseWriter, r *http.Request) {
 		// Check with authenticator.
@@ -307,12 +307,15 @@ func (connector *Connector) registerMiscRoutes() {
 			return
 		}
 		// Get a map of processes and their online status.
-		processes := make(map[string]int)
+		processes := make(map[string]interface{})
 		connector.Processes.Range(func(k string, v *managedProcess) bool {
-			processes[v.Name] = v.Online
-			// TODO: unstable API! no semver guarantees!
-			if v.ToDelete.Load() && r.URL.Query().Get("extrainfo_unstable") == "true" {
-				processes[v.Name] += 10
+			if r.URL.Query().Get("extrainfo") == "true" {
+				processes[v.Name] = map[string]interface{}{
+					"online":   v.Online,
+					"toDelete": v.ToDelete.Load(),
+				}
+			} else {
+				processes[v.Name] = v.Online
 			}
 			return true
 		})
