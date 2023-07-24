@@ -7,10 +7,12 @@ import (
 	"time"
 
 	"github.com/gomodule/redigo/redis"
+	"github.com/puzpuzpuz/xsync/v2"
 )
 
 // RedisAuthenticator is an Authenticator implementation using Redis to store tokens.
 type RedisAuthenticator struct {
+	Users *xsync.MapOf[string, string]
 	Redis *redis.Pool
 	URL   string
 }
@@ -30,6 +32,11 @@ func NewRedisAuthenticator(url string) *RedisAuthenticator {
 		},
 	}
 	return &RedisAuthenticator{Redis: pool, URL: url}
+}
+
+// GetUsers returns a Map with all the users and their corresponding passwords.
+func (a *RedisAuthenticator) GetUsers() *xsync.MapOf[string, string] {
+	return a.Users
 }
 
 // Validate is called on an HTTP API request and checks whether or not the user is authenticated.
@@ -61,7 +68,7 @@ func (a *RedisAuthenticator) Validate(w http.ResponseWriter, r *http.Request) st
 
 // Login allows logging in a user and returning the token.
 func (a *RedisAuthenticator) Login(username string, password string) (string, error) {
-	token := checkValidLoginAndGenerateToken(username, password)
+	token := checkValidLoginAndGenerateToken(a, username, password)
 	if token == "" {
 		return "", nil
 	}

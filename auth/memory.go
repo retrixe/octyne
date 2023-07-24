@@ -8,12 +8,19 @@ import (
 
 // MemoryAuthenticator is an Authenticator implementation using an array to store tokens.
 type MemoryAuthenticator struct {
+	Users  *xsync.MapOf[string, string]
 	Tokens *xsync.MapOf[string, string]
 }
 
 // NewMemoryAuthenticator initializes an authenticator using memory for token storage.
 func NewMemoryAuthenticator() Authenticator {
-	return &MemoryAuthenticator{Tokens: xsync.NewMapOf[string]()}
+	users := CreateUserStore()
+	return &MemoryAuthenticator{Tokens: xsync.NewMapOf[string](), Users: users}
+}
+
+// GetUsers returns a Map with all the users and their corresponding passwords.
+func (a *MemoryAuthenticator) GetUsers() *xsync.MapOf[string, string] {
+	return a.Users
 }
 
 // Validate is called on an HTTP API request and checks whether or not the user is authenticated.
@@ -40,7 +47,7 @@ func (a *MemoryAuthenticator) Validate(w http.ResponseWriter, r *http.Request) s
 
 // Login allows logging in a user and returning the token.
 func (a *MemoryAuthenticator) Login(username string, password string) (string, error) {
-	token := checkValidLoginAndGenerateToken(username, password)
+	token := checkValidLoginAndGenerateToken(a, username, password)
 	if token == "" {
 		return "", nil
 	}

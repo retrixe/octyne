@@ -4,16 +4,17 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
-	"os"
 	"sync"
+
+	"github.com/puzpuzpuz/xsync/v2"
 )
 
 // Authenticator is used by Octyne's Connector to provide HTTP API authentication.
 type Authenticator interface {
+	// GetUsers returns a Map with all the users and their corresponding passwords.
+	GetUsers() *xsync.MapOf[string, string]
 	// Validate is called on an HTTP API request and returns the user's name if request is authenticated.
 	Validate(w http.ResponseWriter, r *http.Request) string
 	// Login allows logging in a user and returning the token.
@@ -29,6 +30,13 @@ type Authenticator interface {
 type ReplaceableAuthenticator struct {
 	Engine      Authenticator
 	EngineMutex sync.RWMutex
+}
+
+// GetUsers returns a Map with all the users and their corresponding passwords.
+func (a *ReplaceableAuthenticator) GetUsers() *xsync.MapOf[string, string] {
+	a.EngineMutex.RLock()
+	defer a.EngineMutex.RUnlock()
+	return a.Engine.GetUsers()
 }
 
 // Validate is called on an HTTP API request and checks whether or not the user is authenticated.
@@ -82,23 +90,11 @@ func isValidToken(token string) bool {
 	return err == nil && len(token) == 128
 }
 
-func checkValidLoginAndGenerateToken(username string, password string) string {
+func checkValidLoginAndGenerateToken(auth Authenticator, username string, password string) string {
 	// Hash the password.
 	sha256sum := fmt.Sprintf("%x", sha256.Sum256([]byte(password)))
-	// Read users.json and check whether a user with such a username and password exists.
-	var users map[string]string
-	contents, err := os.ReadFile("users.json")
-	if err != nil {
-		log.Println("An error occurred while attempting to read users.json! " + err.Error())
-		return ""
-	}
-	err = json.Unmarshal(contents, &users)
-	if err != nil {
-		log.Println("An error occurred while attempting to parse users.json! " + err.Error())
-		return ""
-	}
 	// Check whether this user exists.
-	hashedPassword, exists := users[username]
+	hashedPassword, exists := auth.GetUsers().Load(username)
 	if !exists || hashedPassword != sha256sum {
 		return ""
 	}
