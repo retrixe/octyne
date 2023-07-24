@@ -171,7 +171,7 @@ func (connector *Connector) registerAuthRoutes() {
 			}
 			fmt.Fprintln(w, string(usernamesJson))
 			return
-		} else if r.Method == "POST" || r.Method == "PATCH" {
+		} else if r.Method == "POST" {
 			var buffer bytes.Buffer
 			_, err := buffer.ReadFrom(r.Body)
 			if err != nil {
@@ -186,20 +186,54 @@ func (connector *Connector) registerAuthRoutes() {
 			} else if body.Username == "" || body.Password == "" {
 				httpError(w, "Username or password not provided!", http.StatusBadRequest)
 				return
-			} else if r.Method == "POST" && users[body.Username] != "" {
+			} else if users[body.Username] != "" {
 				httpError(w, "User already exists!", http.StatusConflict)
-				return
-			} else if r.Method == "PATCH" && users[body.Username] == "" {
-				httpError(w, "User does not exist!", http.StatusNotFound)
 				return
 			}
 			sha256sum := fmt.Sprintf("%x", sha256.Sum256([]byte(body.Password)))
-			if r.Method == "POST" {
-				connector.Info("accounts.create", "ip", GetIP(r), "user", user, "newUser", body.Username)
-			} else {
-				connector.Info("accounts.update", "ip", GetIP(r), "user", user, "updatedUser", body.Username)
-			}
+			connector.Info("accounts.create", "ip", GetIP(r), "user", user, "newUser", body.Username)
 			users[body.Username] = sha256sum
+		} else if r.Method == "PATCH" {
+			username := r.URL.Query().Get("username")
+			var buffer bytes.Buffer
+			_, err := buffer.ReadFrom(r.Body)
+			if err != nil {
+				httpError(w, "Failed to read body!", http.StatusBadRequest)
+				return
+			}
+			var body accountsRequestBody
+			err = json.Unmarshal(buffer.Bytes(), &body)
+			if username == "" { // Legacy compat with older API, assume body.Username, fix in 2.0
+				username = body.Username
+			}
+			toUpdateUsername := body.Username != username && body.Username != ""
+			if err != nil {
+				httpError(w, "Invalid JSON body!", http.StatusBadRequest)
+				return
+			} else if username == "" || (body.Password == "" && !toUpdateUsername) {
+				httpError(w, "Username or password not provided!", http.StatusBadRequest)
+				return
+			} else if users[username] == "" {
+				httpError(w, "User does not exist!", http.StatusNotFound)
+				return
+			} else if toUpdateUsername && users[body.Username] != "" {
+				httpError(w, "User already exists!", http.StatusConflict)
+				return
+			}
+			sha256sum := users[username]
+			if body.Password != "" {
+				sha256sum = fmt.Sprintf("%x", sha256.Sum256([]byte(body.Password)))
+			}
+			if toUpdateUsername {
+				connector.Info("accounts.update", "ip", GetIP(r), "user", user,
+					"updatedUser", body.Username, "oldUsername", username, "changedPassword", body.Password != "")
+				delete(users, username)
+				users[body.Username] = sha256sum
+			} else {
+				connector.Info("accounts.update", "ip", GetIP(r), "user", user,
+					"updatedUser", username, "changedPassword", true)
+				users[username] = sha256sum
+			}
 		} else if r.Method == "DELETE" {
 			username := r.URL.Query().Get("username")
 			if username == "" {

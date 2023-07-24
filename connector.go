@@ -124,7 +124,7 @@ func InitializeConnector(config *Config) *Connector {
 
 		GET /accounts
 		POST /accounts
-		PATCH /accounts
+		PATCH /accounts?username=username (username is optional, will be required in v2)
 		DELETE /accounts?username=username
 
 		GET /servers?extrainfo=true/false
