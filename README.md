@@ -96,3 +96,48 @@ By default, Octyne will log all actions performed by users. You can enable/disab
   - Top-level actions: `start`, `stop`, `kill`
   - Console (`server.console`): `access`, `input`
   - Files (`server.files`): `upload`, `download`, `createFolder`, `delete`, `move`, `copy`, `compress`, `decompress`
+
+## Security Practices and Reverse Proxying
+
+Use HTTPS to ensure end-to-end secure transmission. This is easy with Certbot and a reverse proxy like nginx or Apache (if you don't want to use Octyne's built-in HTTPS support). A reverse proxy can rate limit requests to Octyne as well, and put both Octyne and Ecthelion behind the same domain under different endpoints too! (⚠️ Or, under different subdomains, if you want, but this interferes with cookie authentication.)
+
+### Sample nginx Config
+
+```nginx
+location /console {
+    # Remember to set the basePath in Ecthelion's config.json to /console (or whatever you pick)!
+    proxy_pass http://127.0.0.1:3000;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+}
+
+location /octyne {
+    rewrite /octyne/(.*) /$1 break;
+    proxy_pass http://127.0.0.1:42069;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    # Adjust this as necessary for file uploads:
+    client_max_body_size 1024M;
+    # Required for WebSocket functionality to work:
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "Upgrade";
+}
+
+```
+
+### Sample Apache Config
+
+Note: Ensure `mod_proxy` is loaded.
+
+```apache
+<VirtualHost *:443>
+  # Remember to set the basePath in Ecthelion's config.json to /console (or whatever you pick)!
+  # Ecthelion
+  ProxyPass /console http://127.0.0.1:4200/console
+  ProxyPassReverse /console http://127.0.0.1:4200/console
+  # Octyne
+  Protocols h2 h2c http/1.1
+  ProxyPassMatch ^/octyne/(server/.*/console)$  ws://127.0.0.1:42069/$1
+  ProxyPass /octyne http://127.0.0.1:42069
+  ProxyPassReverse /octyne http://127.0.0.1:42069
+</VirtualHost>
+```

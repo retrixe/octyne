@@ -18,6 +18,12 @@ If using [the console API endpoint](#ws-serveridconsoleticketticket) or [the fil
 
 All endpoints may return an error. Errors are formatted in JSON in the following format: `{"error": "error description here"}`.
 
+Currently, possible errors are not documented. This will be done in the future. Contributions in this department are welcome!
+
+## Note
+
+This documentation is still being worked on. While all endpoints are listed, file-related endpoints are not yet fully documented.
+
 ## Endpoints
 
 - [GET /](#get-)
@@ -52,7 +58,7 @@ Get the running version of Octyne. Added in v1.1.0.
 
 HTTP 200 JSON body response containing the Octyne version e.g. `{"version":"1.2.0"}`.
 
-⚠️ Warning: On v1.0, this will return a non-JSON response `Hi, octyne is online and listening to this port successfully!`
+⚠️ *Warning:* On v1.0, this will return a non-JSON response `Hi, octyne is online and listening to this port successfully!`
 
 ---
 
@@ -87,7 +93,7 @@ HTTP 200 JSON body response `{"success":true}` is returned on success.
 
 ### GET /ott (one-time ticket)
 
-Provides you with a one-time ticket which can be used for authenticating with certain endpoints (see the s[Authentication](#authentication) section for more details).
+Provides you with a one-time ticket which can be used for authenticating with certain endpoints (see the [Authentication](#authentication) section for more details).
 
 **Response:**
 
@@ -216,11 +222,105 @@ If the query parameter `extrainfo` is `true`, then the response will include ext
 
 ### GET /server/{id}
 
+Get info about a specific server/app.
+
+**Response:**
+
+HTTP 200 JSON body response with information about the app.
+
+- `status` - The status of the app, `0` for not running, `1` for running, `2` for crashed.
+- `uptime` - The uptime of the app in nanoseconds.
+- `cpuUsage` - The CPU usage of the app in percent.
+- `memoryUsage` - The memory usage of the app in bytes.
+- `totalMemory` - The total memory available to the app in byte.
+- `toDelete` - Whether or not the app is marked for deletion.
+
+e.g.
+
+```json
+{
+  "status":      0,
+  "uptime":      60000000000,
+  "cpuUsage":    70,
+  "memoryUsage": 1073741824,
+  "totalMemory": 8589934592,
+  "toDelete":    false
+}
+```
+
+---
+
 ### POST /server/{id}
 
-TODO: document that STOP is deprecated in favour of KILL and TERM in v1.1
+Start, stop or kill a server/app.
+
+**Request Body:**
+
+Either of the following words in the body:
+
+- `START` - Start the server.
+- `STOP` - Kill the server with SIGKILL. ⚠️ *Warning:* Deprecated in v1.1 in favour of `KILL` and `TERM`.
+- `KILL` - Kill the server with SIGKILL. Added in v1.1.
+- `TERM` - Gracefully stop the server with SIGTERM. Added in v1.1.
+
+**Response:**
+
+HTTP 200 JSON body response `{"success":true}` is returned on success.
+
+---
 
 ### WS /server/{id}/console?ticket=ticket
+
+Connect to the console of a server/app to receive its input/output. This endpoint is a WebSocket endpoint.
+
+**Request Query Parameters:**
+
+- `ticket` - Optional. For browsers and other such environments where you cannot set custom headers, you can use one-time tickets as described in the [Authentication](#authentication) section instead of setting the `Authorization` header.
+
+**WebSocket Protocols:**
+
+- ⚠️ None provided: If no protocol is specified, the old protocol is used by default. This only exists for backwards compatibility! Avoid using this protocol if possible.
+- `console-v2`: This is the recommended protocol to use, since it has a proper extensible format and supports keep alives. Added in v1.1.0.
+
+*Info:* All messages with either protocol are encoded as WebSocket text messages.
+
+**Default protocol:**
+
+⚠️ *Warning:* This protocol is relatively simple, but has issues on newer versions of Octyne (v1.1+), where you may see the WebSocket timeout when there is no activity. It is recommended to use the `console-v2` protocol instead, as this protocol will likely be removed with Octyne v2+.
+
+After establishing a connection, you receive all the output logs from the app so far, and you continue to receive logs line-by-line. You can send input to the app by sending the input string over the WebSocket connection.
+
+**console-v2 protocol:**
+
+In this protocol, all messages are encoded in JSON strings in the following format:
+
+```json
+{
+  "type": "type",
+  // ... other fields
+}
+```
+
+The client may receive messages of the following types:
+
+- `settings` - This is sent upon initial connection, and is currently unused and has no fields.
+- `error` - This is sent when an error occurs, and has the following fields:
+  - `message` - The error message.
+- `output` - This contains output from the app, sent in sequential order, and has the following fields:
+  - `data` - The output received from the app. This can be appended to the previous output with a newline, and an `output` message may contain multiple lines joined with `\n` as well.
+- `pong` - This is sent in response to a `ping` message, and has the following fields:
+  - `id` - The ID from the client's `ping` message.
+
+The client may send messages of the following types:
+
+- `ping` - This is sent to check if the connection is still alive, and has the following fields:
+  - `id` - A unique ID for this ping message. The server will respond with a `pong` message with the same ID.
+- `input` - This is sent to send input to the app, and has the following fields:
+  - `data` - The input to send to the app.
+
+A client will receive the output from the app so far upon initial connection, will continue to receive output line-by-line, and can send input to the app, just like the older, deprecated v1 protocol. Clients should send a `ping` message every few seconds to keep the connection alive, as Octyne enforces a 30 second timeout.
+
+---
 
 ### GET /server/{id}/files?path=path
 
@@ -243,7 +343,3 @@ TODO: document new JSON request format
 TODO: note that compress was broken in v1.0, and recursive folder compression was only supported in v1.1, therefore v1.0 api is incomplete
 
 ### POST /server/{id}/decompress?path=path
-
-## Note
-
-This documentation is still being worked on. While all endpoints are listed, they are not yet fully documented e.g. basic information for many endpoints has not been filled, and possible errors are not yet documented.
