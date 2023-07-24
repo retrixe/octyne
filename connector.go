@@ -479,6 +479,9 @@ func (connector *Connector) registerMiscRoutes() {
 					} else if data == nil {
 						c.Close()
 						break
+					} else if _, ok := connector.Authenticator.GetUsers().Load(user); !ok {
+						c.Close()
+						break
 					}
 					c.SetWriteDeadline(time.Now().Add(timeout)) // Set write deadline esp for v1 connections.
 					str, ok := data.(string)
@@ -518,6 +521,10 @@ func (connector *Connector) registerMiscRoutes() {
 				if err != nil {
 					process.Clients.Delete(token)
 					break // The WebSocket connection has terminated.
+				} else if _, ok := connector.Authenticator.GetUsers().Load(user); !ok {
+					process.Clients.Delete(token)
+					c.Close()
+					break
 				}
 				if v2 {
 					c.SetReadDeadline(time.Now().Add(timeout)) // Update read deadline.

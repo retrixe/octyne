@@ -38,7 +38,10 @@ func (a *MemoryAuthenticator) Validate(w http.ResponseWriter, r *http.Request) s
 	// If valid, return true.
 	username, ok := a.Tokens.Load(token)
 	if ok {
-		return username
+		if _, exists := a.Users.Load(username); exists {
+			return username
+		}
+		a.Logout(token)
 	}
 	http.Error(w, "{\"error\": \"You are not authenticated to access this resource!\"}",
 		http.StatusUnauthorized)

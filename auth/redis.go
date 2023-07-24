@@ -55,7 +55,10 @@ func (a *RedisAuthenticator) Validate(w http.ResponseWriter, r *http.Request) st
 	conn := a.Redis.Get()
 	defer conn.Close()
 	res, err := redis.String(conn.Do("GET", "octyne-token:"+token))
-	if errors.Is(err, redis.ErrNil) {
+	if _, exists := a.Users.Load(res); !exists || errors.Is(err, redis.ErrNil) {
+		if !exists {
+			a.Logout(token)
+		}
 		http.Error(w, "{\"error\": \"You are not authenticated to access this resource!\"}",
 			http.StatusUnauthorized)
 	} else if err != nil {
