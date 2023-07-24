@@ -20,10 +20,6 @@ All endpoints may return an error. Errors are formatted in JSON in the following
 
 Currently, possible errors are not documented. This will be done in the future. Contributions in this department are welcome!
 
-## Note
-
-This documentation is still being worked on. While all endpoints are listed, file-related endpoints are not yet fully documented.
-
 ## Endpoints
 
 - [GET /](#get-)
@@ -324,22 +320,168 @@ A client will receive the output from the app so far upon initial connection, wi
 
 ### GET /server/{id}/files?path=path
 
+Get a list of all files in a folder in the working directory of the app.
+
+**Request Query Parameters:**
+
+- `path` - The path of the folder to list contents of. This is relative to the server's root directory.
+
+**Response:**
+
+HTTP 200 JSON body response with an array of all files in the folder.
+
+Properties include:
+
+- `folder` - Whether or not the file is a folder.
+- `name` - The name of the file.
+- `size` - The size of the file in bytes.
+- `lastModified` - The last modified time of the file in seconds since the Unix epoch.
+- `mimeType` - The MIME type of the file.
+
+Example response:
+
+```json
+{
+  "contents": [
+    {
+      "folder": false,
+      "name": "config.json",
+      "size": 1284,
+      "lastModified": 1600000000,
+      "mimeType": "application/json"
+    }
+  ]
+}
+```
+
+---
+
 ### GET /server/{id}/file?path=path&ticket=ticket
+
+Download a file from the working directory of the app.
+
+**Request Query Parameters:**
+
+- `path` - The path of the file to download. This is relative to the server's root directory.
+- `ticket` - Optional. For browsers and other such environments where you cannot set custom headers, you can use one-time tickets as described in the [Authentication](#authentication) section instead of setting the `Authorization` header.
+
+**Response:**
+
+HTTP 200 response with the file contents in the body is returned on success.
+
+**Response Headers:**
+
+These are helpful for apps and allow browsers to download files directly from this endpoint as well (provided you use a one-time ticket/pass `Authorization` header somehow).
+
+- `Content-Disposition` - The filename of the file being downloaded e.g. `Content-Disposition: attachment; filename=file.txt`.
+- `Content-Type` - The MIME type of the file being downloaded.
+- `Content-Length` - The length of the file being downloaded.
+
+---
 
 ### POST /server/{id}/file?path=path
 
-TODO: document upload limit changes
+Upload a file to the working directory of the app.
+
+**Request Query Parameters:**
+
+- `path` - The path to the folder where the file should be uploaded. This is relative to the server's root directory.
+
+**Request Body:**
+
+The body should be multipart form data, where the contents of the file you want to upload should be in a key named `upload`, and the filename in its metadata should correctly reflect the filename you want once it's uploaded. The upload limit is 5 GB since v1.1+ (was previously 100 MB in v1.0).
+
+**Response:**
+
+HTTP 200 JSON body response `{"success":true}` is returned on success.
+
+---
 
 ### POST /server/{id}/folder?path=path
 
+Create a folder in the working directory of the app.
+
+**Request Query Parameters:**
+
+- `path` - The path where the folder should be created. This is relative to the server's root directory.
+
+**Response:**
+
+HTTP 200 JSON body response `{"success":true}` is returned on success.
+
+---
+
 ### DELETE /server/{id}/file?path=path
+
+Delete a file or folder in the working directory of the app.
+
+**Request Query Parameters:**
+
+- `path` - The path of the file or folder to delete. This is relative to the server's root directory.
+
+**Response:**
+
+HTTP 200 JSON body response `{"success":true}` is returned on success.
+
+---
 
 ### PATCH /server/{id}/file
 
-TODO: document new JSON request format
+Move or copy a file or folder in the working directory of the app.
+
+**Request Body:**
+
+- Old format (⚠️ *Warning:* deprecated): `mv` or `cp`, the old path of the file/folder, and the new path, joined together by new lines, e.g.
+
+  ```text
+  mv
+  /config.json
+  /config.json.old
+  ```
+
+- New format (added in v1.1+): Similar in working to the old format, but uses JSON to encode the body, e.g.
+  
+  ```json
+  {
+    "operation": "mv",
+    "src": "/config.json",
+    "dest": "/config.json.old"
+  }
+  ```
+
+---
 
 ### POST /server/{id}/compress?path=path&compress=boolean
 
-TODO: note that compress was broken in v1.0, and recursive folder compression was only supported in v1.1, therefore v1.0 api is incomplete
+Compress files/folders in the working directory of the app into a ZIP file.
+
+**Request Query Parameters:**
+
+- `path` - The location to create the ZIP file at. This is relative to the server's root directory.
+- `compress` - Optional, default is `true`. This specifies whether or not to compress files/folders in the ZIP file (using the default DEFLATE algorithm). ⚠️ *Warning:* This was broken in v1.0 (it accidentally used a header instead of query parameter), this was fixed in v1.1+.
+
+**Request Body:**
+
+A JSON body containing an array of paths to compress (relative to the server's root directory), e.g. `["/config.json", "/logs"]`.
+
+**Response:**
+
+HTTP 200 JSON body response `{"success":true}` is returned on success.
+
+---
 
 ### POST /server/{id}/decompress?path=path
+
+Decompress a ZIP file in the working directory of the app.
+
+**Request Query Parameters:**
+
+- `path` - The path of the ZIP file to decompress. This is relative to the server's root directory.
+
+**Request Body:**
+
+A string containing the path to decompress the ZIP file to (relative to the server's root directory). A folder will be created at this path, to which the contents of the ZIP file will be extracted.
+
+**Response:**
+
+HTTP 200 JSON body response `{"success":true}` is returned on success.
