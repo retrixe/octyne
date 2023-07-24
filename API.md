@@ -54,6 +54,8 @@ HTTP 200 JSON body response containing the Octyne version e.g. `{"version":"1.2.
 
 ⚠️ Warning: On v1.0, this will return a non-JSON response `Hi, octyne is online and listening to this port successfully!`
 
+---
+
 ### GET /login
 
 This is the only endpoint which doesn't require authentication, since it is the login endpoint to obtain authentication tokens from.
@@ -71,17 +73,27 @@ This is the only endpoint which doesn't require authentication, since it is the 
 
 HTTP 200 JSON body response with the token is returned on success, e.g. `{"token":"RCuRbzzSa51lNByCu+aeYXxoSeaO4HQgMJQ82gWqdSTPm7cHWCQxk7LoQEa8AIkiLBUQXCkkYF8gLHC3lOPfMVU4oU8rXGhQ1EB3VFP30VP2Dv7MG9clAsxuv2x+0jP5"}`
 
+---
+
 ### GET /logout
+
+Logout from Octyne. This invalidates your authentication token.
 
 **Response:**
 
 HTTP 200 JSON body response `{"success":true}` is returned on success.
 
+---
+
 ### GET /ott (one-time ticket)
+
+Provides you with a one-time ticket which can be used for authenticating with certain endpoints (see the s[Authentication](#authentication) section for more details).
 
 **Response:**
 
 HTTP 200 JSON body response with the ticket e.g. `{"ticket":"UTGA3Q=="}` is returned on success. This ticket is tied to your account, IP address, can be used for one request only, and will expire in 30 seconds.
+
+---
 
 ### GET /config
 
@@ -92,6 +104,8 @@ Get Octyne's configuration file contents. Added in v1.1.0.
 HTTP 200 response with the configuration file contents in the body. The configuration file format is documented in the [README](https://github.com/retrixe/octyne/blob/main/README.md).
 
 ⚠️ *Warning:* The configuration file uses [HuJSON](https://github.com/tailscale/hujson) instead of JSON! This means that comments and trailing commas are allowed. Don't parse the body assuming that it's JSON.
+
+---
 
 ### PATCH /config
 
@@ -105,6 +119,8 @@ New configuration file contents in the body. The configuration file format is do
 
 HTTP 200 JSON body response `{"success":true}` is returned on success.
 
+---
+
 ### GET /config/reload
 
 This endpoint tells Octyne to reload `config.json` from disk. Added in v1.1.0.
@@ -113,6 +129,8 @@ This endpoint tells Octyne to reload `config.json` from disk. Added in v1.1.0.
 
 HTTP 200 JSON body response `{"success":true}` is returned on success.
 
+---
+
 ### GET /accounts
 
 Get a list of all accounts. Added in v1.1.0.
@@ -120,6 +138,8 @@ Get a list of all accounts. Added in v1.1.0.
 **Response:**
 
 HTTP 200 JSON body response with an array of all usernames e.g. `["user1", "user2"]` is returned on success.
+
+---
 
 ### POST /accounts
 
@@ -132,6 +152,8 @@ A JSON body containing the username and password of the account to be created, e
 **Response:**
 
 HTTP 200 JSON body response `{"success":true}` is returned on success.
+
+---
 
 ### PATCH /accounts?username=username
 
@@ -151,6 +173,8 @@ A JSON body containing the new username and password of the account, e.g. `{"use
 
 HTTP 200 JSON body response `{"success":true}` is returned on success.
 
+---
+
 ### DELETE /accounts?username=username
 
 Delete an account. Added in v1.1.0.
@@ -159,7 +183,11 @@ Delete an account. Added in v1.1.0.
 
 HTTP 200 JSON body response `{"success":true}` is returned on success.
 
+---
+
 ### GET /servers
+
+Get a list of all servers along with basic information about them.
 
 **Request Query Parameters:**
 
@@ -183,6 +211,8 @@ If the query parameter `extrainfo` is `true`, then the response will include ext
   }
 }
 ```
+
+---
 
 ### GET /server/{id}
 
