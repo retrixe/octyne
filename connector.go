@@ -311,7 +311,7 @@ func (connector *Connector) registerMiscRoutes() {
 		connector.Processes.Range(func(k string, v *managedProcess) bool {
 			if r.URL.Query().Get("extrainfo") == "true" {
 				processes[v.Name] = map[string]interface{}{
-					"online":   v.Online.Load(),
+					"status":   v.Online.Load(),
 					"toDelete": v.ToDelete.Load(),
 				}
 			} else {
