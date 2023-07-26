@@ -169,7 +169,7 @@ This endpoint can be used to change the username/password of an account. Added i
 
 A JSON body containing the new username and password of the account, e.g. `{"username":"user1", "password":"password1"}` (don't use these usernames or passwords in production lol).
 
-⚠️ *Warning:* If no username is provided in the query parameters, the username in the body is used instead. This means that if you want to rename an account, you must use the `username` query parameter to specify the old username. However, the query parameter is only available since v1.2+! On older versions, you cannot rename accounts, and this query parameter will not be recognised for changing passwords either!
+⚠️ *Warning:* If no username is provided in the query parameters, the username in the body is used instead! This means that if you want to rename an account, you must use the `username` query parameter to specify the old username. However, the query parameter is only available since v1.2+! **On older versions, you cannot rename accounts, and the query parameter will not be used for changing passwords either!** If you want to avoid issues, **don't allow the user to change both the username and password at the same time, or you may end up changing the password of a different user instead of renaming the current one!** On older versions, attempting to change only the username will give you a "Username or password not provided!" error. Alternatively, you can implement a version check with the `GET /` endpoint.
 
 **Response:**
 

@@ -131,7 +131,7 @@ func (connector *Connector) registerAuthRoutes() {
 
 	// GET /accounts
 	// POST /accounts
-	// PATCH /accounts
+	// PATCH /accounts?username=username
 	// DELETE /accounts?username=username
 	type accountsRequestBody struct {
 		Username string `json:"username"`
