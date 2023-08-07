@@ -14,7 +14,7 @@ It incorporates the ability to manage files and access the terminal output and i
 - Place octyne in a folder, and run `chmod +x <octyne file name>` to mark it as executable if using macOS/Linux/*nix-like.
 - Follow the steps [here](https://github.com/retrixe/octyne#configuration) to configure Octyne correctly.
 - Run `./<octyne file name>` (`.\<octyne file name>.exe` on Windows) in a terminal in the folder to start Octyne. Alternatively, on Windows/Linux desktops, you can double click the file (on Linux, select `Run in Terminal`, else it will run in the background).
-- You may want to get [Ecthelion](https://github.com/retrixe/ecthelion) as aforementioned in the description, as a web app to manage Octyne, and [octynectl](https://github.com/retrixe/octynectl) as a CLI tool to manage Octyne locally on your machine.
+- You may want to get [Ecthelion](https://github.com/retrixe/ecthelion) as aforementioned in the description, as a web app to manage Octyne, and [octynectl](https://github.com/retrixe/octynectl) as a CLI tool to manage Octyne locally on your machine. [Additionally, make sure to follow the security practices here to prevent attacks against your setup!](https://github.com/retrixe/octyne#security-practices-and-reverse-proxying)
 
 ### Usage
 

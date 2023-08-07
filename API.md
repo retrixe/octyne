@@ -64,7 +64,7 @@ This is the only endpoint which doesn't require authentication, since it is the 
 
 **Request Query Parameters:**
 
-- `cookie` - Optional, defaults to `false`. If set to `true`, the token will be returned in a cookie in addition to the response body. Added in v1.1.0.
+- `cookie` - Optional, defaults to `false`. If set to `true`, the token will be returned in a cookie named `X-Authentication` instead, with a 3 month expiry, `SameSite=Strict` and `HttpOnly` (no `Secure`, since `SameSite=Strict` covers that when HTTPS is in use). Added in v1.1.0.
 
 **Request Headers:**
 
@@ -73,7 +73,9 @@ This is the only endpoint which doesn't require authentication, since it is the 
 
 **Response:**
 
-HTTP 200 JSON body response with the token is returned on success, e.g. `{"token":"RCuRbzzSa51lNByCu+aeYXxoSeaO4HQgMJQ82gWqdSTPm7cHWCQxk7LoQEa8AIkiLBUQXCkkYF8gLHC3lOPfMVU4oU8rXGhQ1EB3VFP30VP2Dv7MG9clAsxuv2x+0jP5"}`
+HTTP 200 JSON body response with the token is returned on success, e.g. `{"token":"RCuRbzzSa51lNByCu+aeYXxoSeaO4HQgMJQ82gWqdSTPm7cHWCQxk7LoQEa8AIkiLBUQXCkkYF8gLHC3lOPfMVU4oU8rXGhQ1EB3VFP30VP2Dv7MG9clAsxuv2x+0jP5"}`.
+
+If the `cookie` query parameter is `true` and Octyne v1.1+ is in use, then the body will be `{"success":true}` instead, and the token will be contained in the `X-Authentication` cookie in `Set-Cookie` header (see `cookie`'s documentation for details).
 
 ---
 
