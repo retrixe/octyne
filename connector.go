@@ -189,6 +189,7 @@ func (connector *Connector) AddProcess(proc *Process) {
 }
 
 func httpError(w http.ResponseWriter, error string, code int) {
+	w.Header().Set("content-type", "application/json")
 	errorJson, err := json.Marshal(struct {
 		Error string `json:"error"`
 	}{Error: error})
@@ -199,10 +200,21 @@ func httpError(w http.ResponseWriter, error string, code int) {
 	}
 }
 
+func writeJsonStringRes(w http.ResponseWriter, resp string) error {
+	w.Header().Set("content-type", "application/json")
+	_, err := fmt.Fprintln(w, resp)
+	return err
+}
+
+func writeJsonStructRes(w http.ResponseWriter, resp interface{}) error {
+	w.Header().Set("content-type", "application/json")
+	return json.NewEncoder(w).Encode(resp)
+}
+
 func (connector *Connector) registerMiscRoutes() {
 	// GET /
 	connector.Router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintln(w, "{\"version\": \""+OctyneVersion+"\"}")
+		writeJsonStringRes(w, "{\"version\": \""+OctyneVersion+"\"}")
 	})
 
 	// GET /config
@@ -223,7 +235,7 @@ func (connector *Connector) registerMiscRoutes() {
 				return
 			}
 			connector.Info("config.view", "ip", GetIP(r), "user", user)
-			fmt.Fprintln(w, string(contents))
+			writeJsonStringRes(w, string(contents))
 		} else if r.Method == "PATCH" {
 			var buffer bytes.Buffer
 			_, err := buffer.ReadFrom(r.Body)
@@ -257,7 +269,7 @@ func (connector *Connector) registerMiscRoutes() {
 			}
 			connector.UpdateConfig(&config)
 			connector.Info("config.edit", "ip", GetIP(r), "user", user, "newConfig", config)
-			fmt.Fprintln(w, "{\"success\":true}")
+			writeJsonStringRes(w, "{\"success\":true}")
 			info.Println("Config updated remotely by user over HTTP API (see action logs for info)!")
 		}
 	})
@@ -293,7 +305,7 @@ func (connector *Connector) registerMiscRoutes() {
 		connector.UpdateConfig(&config)
 		// Send the response.
 		connector.Info("config.reload", "ip", GetIP(r), "user", user)
-		fmt.Fprintln(w, "{\"success\":true}")
+		writeJsonStringRes(w, "{\"success\":true}")
 		info.Println("Config reloaded successfully!")
 	})
 
@@ -320,7 +332,7 @@ func (connector *Connector) registerMiscRoutes() {
 			return true
 		})
 		// Send the list.
-		json.NewEncoder(w).Encode(serversResponse{Servers: processes}) // skipcq GSC-G104
+		writeJsonStructRes(w, serversResponse{Servers: processes}) // skipcq GSC-G104
 	})
 
 	// GET /server/{id}
@@ -368,7 +380,7 @@ func (connector *Connector) registerMiscRoutes() {
 				// Send a response.
 				res := make(map[string]bool)
 				res["success"] = err == nil
-				json.NewEncoder(w).Encode(res) // skipcq GSC-G104
+				writeJsonStructRes(w, res) // skipcq GSC-G104
 			} else if operation == "STOP" || operation == "KILL" || operation == "TERM" {
 				// Stop process if required.
 				if process.Online.Load() == 1 {
@@ -384,7 +396,7 @@ func (connector *Connector) registerMiscRoutes() {
 				// Send a response.
 				res := make(map[string]bool)
 				res["success"] = true
-				json.NewEncoder(w).Encode(res) // skipcq GSC-G104
+				writeJsonStructRes(w, res) // skipcq GSC-G104
 			} else {
 				httpError(w, "Invalid operation requested!", http.StatusBadRequest)
 				return
@@ -422,7 +434,7 @@ func (connector *Connector) registerMiscRoutes() {
 				TotalMemory: totalMemory,
 				ToDelete:    process.ToDelete.Load(),
 			}
-			json.NewEncoder(w).Encode(res) // skipcq GSC-G104
+			writeJsonStructRes(w, res) // skipcq GSC-G104
 		} else {
 			httpError(w, "Only GET and POST is allowed!", http.StatusMethodNotAllowed)
 		}

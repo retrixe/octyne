@@ -47,6 +47,7 @@ func (a *RedisAuthenticator) Validate(w http.ResponseWriter, r *http.Request) st
 
 	token := GetTokenFromRequest(r)
 	if !isValidToken(token) {
+		w.Header().Set("content-type", "application/json")
 		http.Error(w, "{\"error\": \"You are not authenticated to access this resource!\"}",
 			http.StatusUnauthorized)
 		return ""
@@ -59,10 +60,12 @@ func (a *RedisAuthenticator) Validate(w http.ResponseWriter, r *http.Request) st
 		if !exists {
 			a.Logout(token)
 		}
+		w.Header().Set("content-type", "application/json")
 		http.Error(w, "{\"error\": \"You are not authenticated to access this resource!\"}",
 			http.StatusUnauthorized)
 	} else if err != nil {
 		log.Println("An error occurred while making a request to Redis!", err) // skipcq: GO-S0904
+		w.Header().Set("content-type", "application/json")
 		http.Error(w, "{\"error\": \"Internal Server Error!\"}", http.StatusInternalServerError)
 		return ""
 	}

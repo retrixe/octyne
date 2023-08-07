@@ -55,11 +55,11 @@ func (connector *Connector) registerAuthRoutes() {
 				HttpOnly: true,
 				SameSite: http.SameSiteStrictMode,
 			})
-			fmt.Fprintln(w, "{\"success\":true}")
+			writeJsonStringRes(w, "{\"success\":true}")
 			return
 		}
 		// Send the response.
-		json.NewEncoder(w).Encode(loginResponse{Token: token}) // skipcq GSC-G104
+		writeJsonStructRes(w, loginResponse{Token: token}) // skipcq GSC-G104
 	})
 
 	// GET /logout
@@ -95,7 +95,7 @@ func (connector *Connector) registerAuthRoutes() {
 		})
 		// Send the response.
 		connector.Info("auth.logout", "ip", GetIP(r), "user", user)
-		fmt.Fprintln(w, "{\"success\":true}")
+		writeJsonStringRes(w, "{\"success\":true}")
 	})
 
 	// GET /ott
@@ -126,7 +126,7 @@ func (connector *Connector) registerAuthRoutes() {
 			connector.Tickets.Delete(ticketString)
 		})()
 		// Send the response.
-		fmt.Fprintln(w, "{\"ticket\": \""+ticketString+"\"}")
+		writeJsonStringRes(w, "{\"ticket\": \""+ticketString+"\"}")
 	})
 
 	// GET /accounts
@@ -169,7 +169,7 @@ func (connector *Connector) registerAuthRoutes() {
 				httpError(w, "Internal Server Error!", http.StatusInternalServerError)
 				return
 			}
-			fmt.Fprintln(w, string(usernamesJson))
+			writeJsonStringRes(w, string(usernamesJson))
 			return
 		} else if r.Method == "POST" {
 			var buffer bytes.Buffer
@@ -264,6 +264,6 @@ func (connector *Connector) registerAuthRoutes() {
 			httpError(w, "Internal Server Error!", http.StatusInternalServerError)
 			return
 		}
-		fmt.Fprintln(w, "{\"success\":true}")
+		writeJsonStringRes(w, "{\"success\":true}")
 	})
 }

@@ -31,6 +31,7 @@ func (a *MemoryAuthenticator) Validate(w http.ResponseWriter, r *http.Request) s
 
 	token := GetTokenFromRequest(r)
 	if !isValidToken(token) {
+		w.Header().Set("content-type", "application/json")
 		http.Error(w, "{\"error\": \"You are not authenticated to access this resource!\"}",
 			http.StatusUnauthorized)
 		return ""
@@ -43,6 +44,7 @@ func (a *MemoryAuthenticator) Validate(w http.ResponseWriter, r *http.Request) s
 		}
 		a.Logout(token)
 	}
+	w.Header().Set("content-type", "application/json")
 	http.Error(w, "{\"error\": \"You are not authenticated to access this resource!\"}",
 		http.StatusUnauthorized)
 	return ""

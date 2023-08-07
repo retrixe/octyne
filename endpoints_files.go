@@ -99,7 +99,7 @@ func (connector *Connector) registerFileRoutes() {
 				MimeType:     mimeType,
 			})
 		}
-		json.NewEncoder(w).Encode(toSend) // skipcq GSC-G104
+		writeJsonStructRes(w, toSend) // skipcq GSC-G104
 	})
 
 	// GET /server/{id}/file?path=path&ticket=ticket
@@ -177,7 +177,7 @@ func (connector *Connector) registerFileRoutes() {
 			}
 			connector.Info("server.files.delete", "ip", GetIP(r), "user", user, "server", id,
 				"path", clean(r.URL.Query().Get("path")))
-			fmt.Fprintln(w, "{\"success\":true}")
+			writeJsonStringRes(w, "{\"success\":true}")
 		} else if r.Method == "POST" {
 			// Parse our multipart form, 5120 << 20 specifies a maximum upload of a 5 GB file.
 			err := r.ParseMultipartForm(5120 << 20)
@@ -209,7 +209,7 @@ func (connector *Connector) registerFileRoutes() {
 			connector.Info("server.files.upload", "ip", GetIP(r), "user", user, "server", id,
 				"path", clean(r.URL.Query().Get("path")), "filename", meta.Filename)
 			io.Copy(toWrite, file)
-			fmt.Fprintln(w, "{\"success\":true}")
+			writeJsonStringRes(w, "{\"success\":true}")
 		} else if r.Method == "PATCH" {
 			// Get the request body to check the operation.
 			var body bytes.Buffer
@@ -286,7 +286,7 @@ func (connector *Connector) registerFileRoutes() {
 					}
 					connector.Info("server.files.move", "ip", GetIP(r), "user", user, "server", id,
 						"src", clean(req.Src), "dest", clean(req.Dest))
-					fmt.Fprintln(w, "{\"success\":true}")
+					writeJsonStringRes(w, "{\"success\":true}")
 				} else {
 					err := system.Copy(stat.Mode(), oldpath, newpath)
 					if err != nil {
@@ -296,7 +296,7 @@ func (connector *Connector) registerFileRoutes() {
 					}
 					connector.Info("server.files.copy", "ip", GetIP(r), "user", user, "server", id,
 						"src", clean(req.Src), "dest", clean(req.Dest))
-					fmt.Fprintln(w, "{\"success\":true}")
+					writeJsonStringRes(w, "{\"success\":true}")
 				}
 			} else {
 				httpError(w, "Invalid operation! Operations available: mv,cp", http.StatusMethodNotAllowed)
@@ -345,7 +345,7 @@ func (connector *Connector) registerFileRoutes() {
 			}
 			connector.Info("server.files.createFolder", "ip", GetIP(r), "user", user, "server", id,
 				"path", clean(r.URL.Query().Get("path")))
-			fmt.Fprintln(w, "{\"success\":true}")
+			writeJsonStringRes(w, "{\"success\":true}")
 		} else {
 			httpError(w, "Only POST is allowed!", http.StatusMethodNotAllowed)
 		}
@@ -434,7 +434,7 @@ func (connector *Connector) registerFileRoutes() {
 			}
 			connector.Info("server.files.compress", "ip", GetIP(r), "user", user, "server", id,
 				"zipFile", clean(r.URL.Query().Get("path")), "files", files, "compressed", compressed)
-			fmt.Fprintln(w, "{\"success\":true}")
+			writeJsonStringRes(w, "{\"success\":true}")
 		} else {
 			httpError(w, "Only POST is allowed!", http.StatusMethodNotAllowed)
 		}
@@ -513,7 +513,7 @@ func (connector *Connector) registerFileRoutes() {
 			}
 			connector.Info("server.files.decompress", "ip", GetIP(r), "user", user, "server", id,
 				"zipFile", clean(r.URL.Query().Get("path")), "destPath", body.String())
-			fmt.Fprintln(w, "{\"success\":true}")
+			writeJsonStringRes(w, "{\"success\":true}")
 		} else {
 			httpError(w, "Only POST is allowed!", http.StatusMethodNotAllowed)
 		}
