@@ -19,6 +19,7 @@ type RedisAuthenticator struct {
 
 // NewRedisAuthenticator initializes an authenticator using Redis for token storage.
 func NewRedisAuthenticator(url string) *RedisAuthenticator {
+	users := CreateUserStore()
 	pool := &redis.Pool{
 		Wait:      true,
 		MaxIdle:   5,
@@ -31,7 +32,7 @@ func NewRedisAuthenticator(url string) *RedisAuthenticator {
 			return conn, err
 		},
 	}
-	return &RedisAuthenticator{Redis: pool, URL: url}
+	return &RedisAuthenticator{Redis: pool, URL: url, Users: users}
 }
 
 // GetUsers returns a Map with all the users and their corresponding passwords.
