@@ -1,8 +1,10 @@
 package main
 
 import (
+	"archive/tar"
 	"archive/zip"
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -351,7 +353,7 @@ func (connector *Connector) registerFileRoutes() {
 		}
 	})
 
-	// POST /server/{id}/compress?path=path&compress=true/false (compress is optional, default: true)
+	// POST /server/{id}/compress?path=path&compress=true/false/zstd/xz/gzip&archiveType=zip/tar
 	connector.Router.HandleFunc("/server/{id}/compress", func(w http.ResponseWriter, r *http.Request) {
 		// Check with authenticator.
 		user := connector.Validate(w, r)
@@ -360,84 +362,124 @@ func (connector *Connector) registerFileRoutes() {
 		}
 		// Get the process being accessed.
 		id := mux.Vars(r)["id"]
-		process, err := connector.Processes.Load(id)
+		process, exists := connector.Processes.Load(id)
 		// In case the process doesn't exist.
-		if !err {
+		if !exists {
 			httpError(w, "This server does not exist!", http.StatusNotFound)
 			return
+		} else if r.Method != "POST" {
+			httpError(w, "Only POST is allowed!", http.StatusMethodNotAllowed)
+			return
 		}
-		if r.Method == "POST" {
-			// Get the body.
-			var buffer bytes.Buffer
-			_, err := buffer.ReadFrom(r.Body)
-			if err != nil {
-				httpError(w, "Failed to read body!", http.StatusBadRequest)
+		// Decode parameters.
+		archiveType := "zip"
+		compression := "true"
+		if r.URL.Query().Get("archiveType") != "" {
+			archiveType = r.URL.Query().Get("archiveType")
+		}
+		if r.URL.Query().Get("compress") != "" {
+			compression = r.URL.Query().Get("compress")
+		}
+		if archiveType != "zip" && archiveType != "tar" {
+			httpError(w, "Invalid archive type!", http.StatusBadRequest)
+			return
+		} else if compression != "true" && compression != "false" &&
+			compression != "zstd" && compression != "xz" && compression != "gzip" {
+			httpError(w, "Invalid compression type!", http.StatusBadRequest)
+			return
+		}
+		// Get the body.
+		var buffer bytes.Buffer
+		_, err := buffer.ReadFrom(r.Body)
+		if err != nil {
+			httpError(w, "Failed to read body!", http.StatusBadRequest)
+			return
+		}
+		// Decode the array body and send it to files.
+		var files []string
+		err = json.Unmarshal(buffer.Bytes(), &files)
+		if err != nil {
+			httpError(w, "Invalid JSON body!", http.StatusBadRequest)
+			return
+		}
+		// Validate every path.
+		process.ServerConfigMutex.RLock()
+		defer process.ServerConfigMutex.RUnlock()
+		for _, file := range files {
+			filepath := joinPath(process.Directory, file)
+			if !strings.HasPrefix(filepath, clean(process.Directory)) {
+				httpError(w, "One of the paths provided is outside the server directory!", http.StatusForbidden)
 				return
-			}
-			// Decode the array body and send it to files.
-			var files []string
-			err = json.Unmarshal(buffer.Bytes(), &files)
-			if err != nil {
-				httpError(w, "Invalid JSON body!", http.StatusBadRequest)
-				return
-			}
-			// Validate every path.
-			process.ServerConfigMutex.RLock()
-			defer process.ServerConfigMutex.RUnlock()
-			for _, file := range files {
-				filepath := joinPath(process.Directory, file)
-				if !strings.HasPrefix(filepath, clean(process.Directory)) {
-					httpError(w, "One of the paths provided is outside the server directory!", http.StatusForbidden)
-					return
-				} else if _, err := os.Stat(filepath); err != nil {
-					if os.IsNotExist(err) {
-						httpError(w, "The file "+file+" does not exist!", http.StatusBadRequest)
-					} else {
-						log.Println("An error occurred when checking "+filepath+" exists for compression", "("+process.Name+")", err)
-						httpError(w, "Internal Server Error!", http.StatusInternalServerError)
-					}
-					return
+			} else if _, err := os.Stat(filepath); err != nil {
+				if os.IsNotExist(err) {
+					httpError(w, "The file "+file+" does not exist!", http.StatusBadRequest)
+				} else {
+					log.Println("An error occurred when checking "+filepath+" exists for compression", "("+process.Name+")", err)
+					httpError(w, "Internal Server Error!", http.StatusInternalServerError)
 				}
-			}
-			// Check if a file exists at the location of the archive.
-			archivePath := joinPath(process.Directory, r.URL.Query().Get("path"))
-			if !strings.HasPrefix(archivePath, clean(process.Directory)) {
-				httpError(w, "The requested archive is outside the server directory!", http.StatusForbidden)
 				return
 			}
-			_, exists := os.Stat(archivePath)
-			if !os.IsNotExist(exists) {
-				httpError(w, "A file/folder already exists at the path of requested archive!", http.StatusBadRequest)
-				return
-			}
+		}
+		// Check if a file exists at the location of the archive.
+		archivePath := joinPath(process.Directory, r.URL.Query().Get("path"))
+		if !strings.HasPrefix(archivePath, clean(process.Directory)) {
+			httpError(w, "The requested archive is outside the server directory!", http.StatusForbidden)
+			return
+		}
+		_, err = os.Stat(archivePath)
+		if !os.IsNotExist(err) {
+			httpError(w, "A file/folder already exists at the path of requested archive!", http.StatusBadRequest)
+			return
+		}
 
-			// Begin compressing the archive.
-			archiveFile, err := os.Create(archivePath)
-			if err != nil {
-				log.Println("An error occurred when creating "+archivePath+" for compression", "("+process.Name+")", err)
-				httpError(w, "Internal Server Error!", http.StatusInternalServerError)
-				return
-			}
-			defer archiveFile.Close()
+		// Begin compressing the archive.
+		archiveFile, err := os.Create(archivePath)
+		if err != nil {
+			log.Println("An error occurred when creating "+archivePath+" for compression", "("+process.Name+")", err)
+			httpError(w, "Internal Server Error!", http.StatusInternalServerError)
+			return
+		}
+		defer archiveFile.Close()
+		if archiveType == "zip" {
 			archive := zip.NewWriter(archiveFile)
 			defer archive.Close()
 			// Archive stuff inside.
-			compressed := r.URL.Query().Get("compress") != "false"
 			// TODO: Why is parent always process.Directory? Support different base path?
 			for _, file := range files {
-				err := system.AddFileToZip(archive, process.Directory, file, compressed)
+				err := system.AddFileToZip(archive, process.Directory, file, compression != "false")
 				if err != nil {
 					log.Println("An error occurred when adding "+file+" to "+archivePath, "("+process.Name+")", err)
 					httpError(w, "Internal Server Error!", http.StatusInternalServerError)
 					return
 				}
 			}
-			connector.Info("server.files.compress", "ip", GetIP(r), "user", user, "server", id,
-				"archive", clean(r.URL.Query().Get("path")), "files", files, "compressed", compressed)
-			writeJsonStringRes(w, "{\"success\":true}")
 		} else {
-			httpError(w, "Only POST is allowed!", http.StatusMethodNotAllowed)
+			var archive *tar.Writer
+			if compression == "true" || compression == "gzip" || compression == "" {
+				compressionWriter := gzip.NewWriter(archiveFile)
+				defer compressionWriter.Close()
+				archive = tar.NewWriter(compressionWriter)
+			} else if compression == "xz" || compression == "zstd" {
+				compressionWriter := system.NativeCompressionWriter(archiveFile, compression)
+				defer compressionWriter.Close()
+				archive = tar.NewWriter(compressionWriter)
+			} else {
+				archive = tar.NewWriter(archiveFile)
+			}
+			defer archive.Close()
+			for _, file := range files {
+				err := system.AddFileToTar(archive, process.Directory, file)
+				if err != nil {
+					log.Println("An error occurred when adding "+file+" to "+archivePath, "("+process.Name+")", err)
+					httpError(w, "Internal Server Error!", http.StatusInternalServerError)
+					return
+				}
+			}
 		}
+		connector.Info("server.files.compress", "ip", GetIP(r), "user", user, "server", id,
+			"archive", clean(r.URL.Query().Get("path")), "archiveType", archiveType,
+			"compression", compression, "files", files)
+		writeJsonStringRes(w, "{\"success\":true}")
 	})
 
 	// POST /server/{id}/decompress?path=path
@@ -506,7 +548,19 @@ func (connector *Connector) registerFileRoutes() {
 				return
 			}
 			// Decompress the archive.
-			err = system.UnzipFile(archivePath, unpackPath)
+			if strings.HasSuffix(archivePath, ".zip") {
+				err = system.UnzipFile(archivePath, unpackPath)
+			} else if strings.HasSuffix(archivePath, ".tar") ||
+				strings.HasSuffix(archivePath, ".tar.gz") || strings.HasSuffix(archivePath, ".tgz") ||
+				strings.HasSuffix(archivePath, ".tar.bz") || strings.HasSuffix(archivePath, ".tbz") ||
+				strings.HasSuffix(archivePath, ".tar.bz2") || strings.HasSuffix(archivePath, ".tbz2") ||
+				strings.HasSuffix(archivePath, ".tar.xz") || strings.HasSuffix(archivePath, ".txz") ||
+				strings.HasSuffix(archivePath, ".tar.zst") || strings.HasSuffix(archivePath, ".tzst") {
+				err = system.ExtractTarFile(archivePath, unpackPath)
+			} else {
+				httpError(w, "Unsupported archive file!", http.StatusBadRequest)
+				return
+			}
 			if err != nil {
 				httpError(w, "An error occurred while decompressing archive!", http.StatusInternalServerError)
 				return

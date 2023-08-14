@@ -43,7 +43,7 @@ Currently, possible errors are not documented. This will be done in the future. 
 - [POST /server/{id}/folder?path=path](#post-serveridfolderpathpath)
 - [DELETE /server/{id}/file?path=path](#delete-serveridfilepathpath)
 - [PATCH /server/{id}/file](#patch-serveridfile)
-- [POST /server/{id}/compress?path=path&compress=boolean](#post-serveridcompresspathpathcompressboolean)
+- [POST /server/{id}/compress?path=path&compress=algorithm&archiveType=archiveType](#post-serveridcompresspathpathcompressalgorithmarchivetypearchivetype)
 - [POST /server/{id}/decompress?path=path](#post-serveriddecompresspathpath)
 
 ### GET /
@@ -453,18 +453,23 @@ Move or copy a file or folder in the working directory of the app.
 
 ---
 
-### POST /server/{id}/compress?path=path&compress=boolean
+### POST /server/{id}/compress?path=path&compress=algorithm&archiveType=archiveType
 
-Compress files/folders in the working directory of the app into a ZIP file.
+Compress files/folders in the working directory of the app into a ZIP or TAR archive.
+
+Support for `tar(.gz/xz/zst)` archives was added in v1.2+.
 
 **Request Query Parameters:**
 
-- `path` - The location to create the ZIP file at. This is relative to the server's root directory.
-- `compress` - Optional, default is `true`. This specifies whether or not to compress files/folders in the ZIP file (using the default DEFLATE algorithm). ⚠️ *Warning:* This was broken in v1.0 (it accidentally used a header instead of query parameter), this was fixed in v1.1+.
+- `path` - The location to create the archive at. This is relative to the server's root directory.
+- `archiveType` - Optional, default is `zip`. This specifies the archive type to use, currently, `zip` and `tar` are supported. Added in v1.2+.
+- `compress` - Optional, default is `true`, possible values are `true`/`false`, and `gzip`/`zstd`/`xz` for `tar` archives. This specifies whether or not to compress files/folders in the archive. `true` corresponds to the default DEFLATE algorithm for `zip`, and GZIP for `tar`. ⚠️ *Warning:* This was broken in v1.0 (it accidentally used a header instead of query parameter), this was fixed in v1.1+.
 
 **Request Body:**
 
 A JSON body containing an array of paths to compress (relative to the server's root directory), e.g. `["/config.json", "/logs"]`.
+
+⚠️ *Warning:* This API was unable to compress folders in v1.0, this function was added in v1.1+.
 
 **Response:**
 
@@ -474,16 +479,23 @@ HTTP 200 JSON body response `{"success":true}` is returned on success.
 
 ### POST /server/{id}/decompress?path=path
 
-Decompress a ZIP file in the working directory of the app.
+Decompress a ZIP or TAR archive in the working directory of the app.
+
+The full list of supported archive formats is:
+
+- `.zip`
+- `.tar(.gz/bz2/bz/zst/xz)` and their respective short forms `tgz/txz/tbz/tbz2/tzst`, support for these was added in v1.2+.
 
 **Request Query Parameters:**
 
-- `path` - The path of the ZIP file to decompress. This is relative to the server's root directory.
+- `path` - The path of the archive to decompress. This is relative to the server's root directory.
 
 **Request Body:**
 
-A string containing the path to decompress the ZIP file to (relative to the server's root directory). A folder will be created at this path, to which the contents of the ZIP file will be extracted.
+A string containing the path to decompress the archive to (relative to the server's root directory). A folder will be created at this path, to which the contents of the archive will be extracted.
 
 **Response:**
 
 HTTP 200 JSON body response `{"success":true}` is returned on success.
+
+⚠️ Tip when attempting to decompress unsupported archive formats like `tar` on Octyne v1.1 and older: Check if the error is `An error occurred when decompressing ZIP file!` v1.2+ says `archive` instead of `ZIP file` and explicitly blocks unsupported archive types. This can help you inform the user if their Octyne installation is out of date, since decompressing these archives will fail on older versions.
