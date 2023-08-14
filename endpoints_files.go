@@ -399,27 +399,27 @@ func (connector *Connector) registerFileRoutes() {
 					return
 				}
 			}
-			// Check if a file exists at the location of the ZIP file.
-			zipPath := joinPath(process.Directory, r.URL.Query().Get("path"))
-			if !strings.HasPrefix(zipPath, clean(process.Directory)) {
-				httpError(w, "The requested ZIP file is outside the server directory!", http.StatusForbidden)
+			// Check if a file exists at the location of the archive.
+			archivePath := joinPath(process.Directory, r.URL.Query().Get("path"))
+			if !strings.HasPrefix(archivePath, clean(process.Directory)) {
+				httpError(w, "The requested archive is outside the server directory!", http.StatusForbidden)
 				return
 			}
-			_, exists := os.Stat(zipPath)
+			_, exists := os.Stat(archivePath)
 			if !os.IsNotExist(exists) {
-				httpError(w, "A file/folder already exists at the path of requested ZIP!", http.StatusBadRequest)
+				httpError(w, "A file/folder already exists at the path of requested archive!", http.StatusBadRequest)
 				return
 			}
 
-			// Begin compressing a ZIP.
-			zipFile, err := os.Create(zipPath)
+			// Begin compressing the archive.
+			archiveFile, err := os.Create(archivePath)
 			if err != nil {
-				log.Println("An error occurred when creating "+zipPath+" for compression", "("+process.Name+")", err)
+				log.Println("An error occurred when creating "+archivePath+" for compression", "("+process.Name+")", err)
 				httpError(w, "Internal Server Error!", http.StatusInternalServerError)
 				return
 			}
-			defer zipFile.Close()
-			archive := zip.NewWriter(zipFile)
+			defer archiveFile.Close()
+			archive := zip.NewWriter(archiveFile)
 			defer archive.Close()
 			// Archive stuff inside.
 			compressed := r.URL.Query().Get("compress") != "false"
@@ -427,13 +427,13 @@ func (connector *Connector) registerFileRoutes() {
 			for _, file := range files {
 				err := system.AddFileToZip(archive, process.Directory, file, compressed)
 				if err != nil {
-					log.Println("An error occurred when adding "+file+" to "+zipPath, "("+process.Name+")", err)
+					log.Println("An error occurred when adding "+file+" to "+archivePath, "("+process.Name+")", err)
 					httpError(w, "Internal Server Error!", http.StatusInternalServerError)
 					return
 				}
 			}
 			connector.Info("server.files.compress", "ip", GetIP(r), "user", user, "server", id,
-				"zipFile", clean(r.URL.Query().Get("path")), "files", files, "compressed", compressed)
+				"archive", clean(r.URL.Query().Get("path")), "files", files, "compressed", compressed)
 			writeJsonStringRes(w, "{\"success\":true}")
 		} else {
 			httpError(w, "Only POST is allowed!", http.StatusMethodNotAllowed)
@@ -459,22 +459,22 @@ func (connector *Connector) registerFileRoutes() {
 		defer process.ServerConfigMutex.RUnlock()
 		directory := clean(process.Directory)
 		if r.Method == "POST" {
-			// Check if the ZIP file exists.
-			zipPath := joinPath(directory, r.URL.Query().Get("path"))
-			if !strings.HasPrefix(zipPath, directory) {
-				httpError(w, "The ZIP file is outside the server directory!", http.StatusForbidden)
+			// Check if the archive exists.
+			archivePath := joinPath(directory, r.URL.Query().Get("path"))
+			if !strings.HasPrefix(archivePath, directory) {
+				httpError(w, "The archive is outside the server directory!", http.StatusForbidden)
 				return
 			}
-			zipStat, exists := os.Stat(zipPath)
+			archiveStat, exists := os.Stat(archivePath)
 			if os.IsNotExist(exists) {
-				httpError(w, "The requested ZIP does not exist!", http.StatusBadRequest)
+				httpError(w, "The requested archive does not exist!", http.StatusBadRequest)
 				return
 			} else if exists != nil {
-				log.Println("An error occurred when checking "+zipPath+" ZIP file exists", "("+process.Name+")", err)
+				log.Println("An error occurred when checking "+archivePath+" archive file exists", "("+process.Name+")", err)
 				httpError(w, "Internal Server Error!", http.StatusInternalServerError)
 				return
-			} else if zipStat.IsDir() {
-				httpError(w, "The requested ZIP is a folder!", http.StatusBadRequest)
+			} else if archiveStat.IsDir() {
+				httpError(w, "The requested archive is a folder!", http.StatusBadRequest)
 				return
 			}
 			// Check if there is a file/folder at the destination.
@@ -486,33 +486,33 @@ func (connector *Connector) registerFileRoutes() {
 			}
 			unpackPath := joinPath(directory, body.String())
 			if !strings.HasPrefix(unpackPath, directory) {
-				httpError(w, "The ZIP file is outside the server directory!", http.StatusForbidden)
+				httpError(w, "The archive file is outside the server directory!", http.StatusForbidden)
 				return
 			}
 			stat, err := os.Stat(unpackPath)
 			if os.IsNotExist(err) {
 				err = os.Mkdir(unpackPath, os.ModePerm)
 				if err != nil {
-					log.Println("An error occurred when creating "+unpackPath+" to unpack ZIP", "("+process.Name+")", err)
+					log.Println("An error occurred when creating "+unpackPath+" to unpack archive", "("+process.Name+")", err)
 					httpError(w, "Internal Server Error!", http.StatusInternalServerError)
 					return
 				}
 			} else if err != nil {
-				log.Println("An error occurred when checking "+unpackPath+" exists to unpack ZIP to", "("+process.Name+")", err)
+				log.Println("An error occurred when checking "+unpackPath+" exists to unpack archive to", "("+process.Name+")", err)
 				httpError(w, "Internal Server Error!", http.StatusInternalServerError)
 				return
 			} else if !stat.IsDir() {
 				httpError(w, "There is a file at the requested unpack destination!", http.StatusBadRequest)
 				return
 			}
-			// Decompress the ZIP.
-			err = system.UnzipFile(zipPath, unpackPath)
+			// Decompress the archive.
+			err = system.UnzipFile(archivePath, unpackPath)
 			if err != nil {
-				httpError(w, "An error occurred while unzipping!", http.StatusInternalServerError)
+				httpError(w, "An error occurred while decompressing archive!", http.StatusInternalServerError)
 				return
 			}
 			connector.Info("server.files.decompress", "ip", GetIP(r), "user", user, "server", id,
-				"zipFile", clean(r.URL.Query().Get("path")), "destPath", body.String())
+				"archive", clean(r.URL.Query().Get("path")), "destPath", body.String())
 			writeJsonStringRes(w, "{\"success\":true}")
 		} else {
 			httpError(w, "Only POST is allowed!", http.StatusMethodNotAllowed)
