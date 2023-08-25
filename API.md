@@ -455,9 +455,9 @@ Move or copy a file or folder in the working directory of the app.
 
 ### POST /server/{id}/compress?path=path&compress=algorithm&archiveType=archiveType
 
-Compress files/folders in the working directory of the app into a ZIP or TAR archive.
+Compress files/folders in the working directory of the app into a ZIP or TAR archive. Support for `tar(.gz/xz/zst)` archives was added in v1.2+.
 
-Support for `tar(.gz/xz/zst)` archives was added in v1.2+.
+⚠️ *Info:* The `POST /server/{id}/compress/v2` API is available as well, which is identical to this, but guaranteed to support `tar` archives, and can be used by API clients to ensure archives aren't accidentally created as ZIP files on older Octyne versions.
 
 **Request Query Parameters:**
 

@@ -354,7 +354,8 @@ func (connector *Connector) registerFileRoutes() {
 	})
 
 	// POST /server/{id}/compress?path=path&compress=true/false/zstd/xz/gzip&archiveType=zip/tar
-	connector.Router.HandleFunc("/server/{id}/compress", func(w http.ResponseWriter, r *http.Request) {
+	// POST /server/{id}/compress/v2?path=path&compress=true/false/zstd/xz/gzip&archiveType=zip/tar
+	compressionEndpoint := func(w http.ResponseWriter, r *http.Request) {
 		// Check with authenticator.
 		user := connector.Validate(w, r)
 		if user == "" {
@@ -480,7 +481,9 @@ func (connector *Connector) registerFileRoutes() {
 			"archive", clean(r.URL.Query().Get("path")), "archiveType", archiveType,
 			"compression", compression, "files", files)
 		writeJsonStringRes(w, "{\"success\":true}")
-	})
+	}
+	connector.Router.HandleFunc("/server/{id}/compress", compressionEndpoint)
+	connector.Router.HandleFunc("/server/{id}/compress/v2", compressionEndpoint)
 
 	// POST /server/{id}/decompress?path=path
 	connector.Router.HandleFunc("/server/{id}/decompress", func(w http.ResponseWriter, r *http.Request) {
