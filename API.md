@@ -43,7 +43,8 @@ Currently, possible errors are not documented. This will be done in the future. 
 - [POST /server/{id}/folder?path=path](#post-serveridfolderpathpath)
 - [DELETE /server/{id}/file?path=path](#delete-serveridfilepathpath)
 - [PATCH /server/{id}/file](#patch-serveridfile)
-- [POST /server/{id}/compress?path=path&compress=algorithm&archiveType=archiveType&basePath=path](#post-serveridcompresspathpathcompressalgorithmarchivetypearchivetypebasepathpath)
+- [GET /server/{id}/compress?token=token](#get-serveridcompresstokentoken)
+- [POST /server/{id}/compress?path=path&compress=algorithm&archiveType=archiveType&basePath=path&async=boolean](#post-serveridcompresspathpathcompressalgorithmarchivetypearchivetypebasepathpathasyncboolean)
 - [POST /server/{id}/decompress?path=path](#post-serveriddecompresspathpath)
 
 ### GET /
@@ -453,11 +454,25 @@ Move or copy a file or folder in the working directory of the app.
 
 ---
 
-### POST /server/{id}/compress?path=path&compress=algorithm&archiveType=archiveType&basePath=path
+### GET /server/{id}/compress?token=token
+
+Get the progress of an async compression request. Added in v1.2+.
+
+**Request Query Parameters:**
+
+- `token` - The token returned by [POST /server/{id}/compress?path=path&compress=algorithm&archiveType=archiveType&basePath=path&async=boolean](#post-serveridcompresspathpathcompressalgorithmarchivetypearchivetypebasepathpathasyncboolean) corresponding to your compression request.
+
+**Response:**
+
+HTTP 200 JSON body response `{"finished":true}` is returned on success. If the compression request is still in progress, the body will be `{"finished":false}`, and HTTP 500 errors will be returned if the compression request failed.
+
+---
+
+### POST /server/{id}/compress?path=path&compress=algorithm&archiveType=archiveType&basePath=path&async=boolean
 
 Compress files/folders in the working directory of the app into a ZIP or TAR archive. Support for `tar(.gz/xz/zst)` archives was added in v1.2+.
 
-⚠️ *Info:* The `POST /server/{id}/compress/v2` API is available as well, which is identical to this, but guaranteed to support `tar` archives and the `basePath` query parameter. The v2 endpoint can be used by API clients to ensure archives aren't accidentally created as ZIP files on older Octyne versions.
+⚠️ *Info:* The `POST /server/{id}/compress/v2` API is available as well, which is identical to this, but guaranteed to support `tar` archives, the `basePath` and `async` query parameters. The v2 endpoint can be used by API clients to ensure archives aren't accidentally created as ZIP files on older Octyne versions.
 
 **Request Query Parameters:**
 
@@ -465,6 +480,7 @@ Compress files/folders in the working directory of the app into a ZIP or TAR arc
 - `basePath` - Optional, default is `/`. The location containing all files in the request body. This is used as the archive's top-level directory, all file paths in the request body are calculated relative to `basePath`. Added in v1.2+.
 - `archiveType` - Optional, default is `zip`. This specifies the archive type to use, currently, `zip` and `tar` are supported. Added in v1.2+.
 - `compress` - Optional, default is `true`, possible values are `true`/`false`, and `gzip`/`zstd`/`xz` for `tar` archives. This specifies whether or not to compress files/folders in the archive. `true` corresponds to the default DEFLATE algorithm for `zip`, and GZIP for `tar`. ⚠️ *Warning:* This was broken in v1.0 (it accidentally used a header instead of query parameter), this was fixed in v1.1+.
+- `async` - Optional, default is `false`. If `true`, the endpoint will return a token immediately instead of waiting for the archive to compress. This token can be used against [GET /server/{id}/compress?token=token](#get-serveridcompresstokentoken) to get the status of the compression request. The token expires 10 seconds after the compression request has been serviced. Added in v1.2+.
 
 **Request Body:**
 

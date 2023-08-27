@@ -5,6 +5,8 @@ import (
 	"archive/zip"
 	"bytes"
 	"compress/gzip"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,8 +16,10 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/puzpuzpuz/xsync/v2"
 	"github.com/retrixe/octyne/system"
 )
 
@@ -353,8 +357,10 @@ func (connector *Connector) registerFileRoutes() {
 		}
 	})
 
-	// POST /server/{id}/compress?path=path&compress=true/false/zstd/xz/gzip&archiveType=zip/tar&basePath=path
-	// POST /server/{id}/compress/v2?path=path&compress=true/false/zstd/xz/gzip&archiveType=zip/tar&basePath=path
+	compressionProgressMap := xsync.NewMapOf[string]()
+	// GET /server/{id}/compress?token=token
+	// POST /server/{id}/compress?path=path&compress=true/false/zstd/xz/gzip&archiveType=zip/tar&basePath=path&async=boolean
+	// POST /server/{id}/compress/v2?path=path&compress=true/false/zstd/xz/gzip&archiveType=zip/tar&basePath=path&async=boolean
 	compressionEndpoint := func(w http.ResponseWriter, r *http.Request) {
 		// Check with authenticator.
 		user := connector.Validate(w, r)
@@ -368,11 +374,28 @@ func (connector *Connector) registerFileRoutes() {
 		if !exists {
 			httpError(w, "This server does not exist!", http.StatusNotFound)
 			return
+		} else if r.Method == "GET" {
+			if r.URL.Query().Get("token") == "" {
+				httpError(w, "No token provided!", http.StatusBadRequest)
+				return
+			}
+			progress, valid := compressionProgressMap.Load(r.URL.Query().Get("token"))
+			if !valid {
+				httpError(w, "Invalid token!", http.StatusBadRequest)
+			} else if progress == "finished" {
+				writeJsonStringRes(w, "{\"finished\":true}")
+			} else if progress == "" {
+				writeJsonStringRes(w, "{\"finished\":false}")
+			} else {
+				httpError(w, progress, http.StatusInternalServerError)
+			}
+			return
 		} else if r.Method != "POST" {
-			httpError(w, "Only POST is allowed!", http.StatusMethodNotAllowed)
+			httpError(w, "Only GET and POST are allowed!", http.StatusMethodNotAllowed)
 			return
 		}
 		// Decode parameters.
+		async := r.URL.Query().Get("async") == "true"
 		basePath := r.URL.Query().Get("basePath")
 		archiveType := "zip"
 		compression := "true"
@@ -445,46 +468,74 @@ func (connector *Connector) registerFileRoutes() {
 			httpError(w, "Internal Server Error!", http.StatusInternalServerError)
 			return
 		}
-		defer archiveFile.Close()
-		if archiveType == "zip" {
-			archive := zip.NewWriter(archiveFile)
-			defer archive.Close()
-			// Archive stuff inside.
-			for _, file := range files {
-				err := system.AddFileToZip(archive, joinPath(process.Directory, basePath), file, compression != "false")
-				if err != nil {
-					log.Println("An error occurred when adding "+file+" to "+archivePath, "("+process.Name+")", err)
-					httpError(w, "Internal Server Error!", http.StatusInternalServerError)
-					return
+		tokenBytes := make([]byte, 16)
+		rand.Read(tokenBytes) // Tolerate errors here, an error here is incredibly unlikely: skipcq GSC-G104
+		token := hex.EncodeToString(tokenBytes)
+		completionFunc := func() {
+			defer archiveFile.Close()
+			if archiveType == "zip" {
+				archive := zip.NewWriter(archiveFile)
+				defer archive.Close()
+				// Archive stuff inside.
+				for _, file := range files {
+					err := system.AddFileToZip(archive, joinPath(process.Directory, basePath), file, compression != "false")
+					if err != nil {
+						log.Println("An error occurred when adding "+file+" to "+archivePath, "("+process.Name+")", err)
+						if !async {
+							httpError(w, "Internal Server Error!", http.StatusInternalServerError)
+						} else {
+							compressionProgressMap.Store(token, "Internal Server Error!")
+						}
+						return
+					}
 				}
-			}
-		} else {
-			var archive *tar.Writer
-			if compression == "true" || compression == "gzip" || compression == "" {
-				compressionWriter := gzip.NewWriter(archiveFile)
-				defer compressionWriter.Close()
-				archive = tar.NewWriter(compressionWriter)
-			} else if compression == "xz" || compression == "zstd" {
-				compressionWriter := system.NativeCompressionWriter(archiveFile, compression)
-				defer compressionWriter.Close()
-				archive = tar.NewWriter(compressionWriter)
 			} else {
-				archive = tar.NewWriter(archiveFile)
-			}
-			defer archive.Close()
-			for _, file := range files {
-				err := system.AddFileToTar(archive, joinPath(process.Directory, basePath), file)
-				if err != nil {
-					log.Println("An error occurred when adding "+file+" to "+archivePath, "("+process.Name+")", err)
-					httpError(w, "Internal Server Error!", http.StatusInternalServerError)
-					return
+				var archive *tar.Writer
+				if compression == "true" || compression == "gzip" || compression == "" {
+					compressionWriter := gzip.NewWriter(archiveFile)
+					defer compressionWriter.Close()
+					archive = tar.NewWriter(compressionWriter)
+				} else if compression == "xz" || compression == "zstd" {
+					compressionWriter := system.NativeCompressionWriter(archiveFile, compression)
+					defer compressionWriter.Close()
+					archive = tar.NewWriter(compressionWriter)
+				} else {
+					archive = tar.NewWriter(archiveFile)
 				}
+				defer archive.Close()
+				for _, file := range files {
+					err := system.AddFileToTar(archive, joinPath(process.Directory, basePath), file)
+					if err != nil {
+						log.Println("An error occurred when adding "+file+" to "+archivePath, "("+process.Name+")", err)
+						if !async {
+							httpError(w, "Internal Server Error!", http.StatusInternalServerError)
+						} else {
+							compressionProgressMap.Store(token, "Internal Server Error!")
+						}
+						return
+					}
+				}
+			}
+			connector.Info("server.files.compress", "ip", GetIP(r), "user", user, "server", id,
+				"archive", clean(r.URL.Query().Get("path")), "archiveType", archiveType,
+				"compression", compression, "files", files)
+			if async {
+				compressionProgressMap.Store(token, "finished")
+				go func() { // We want our previous Close() defers to call *now*, so we do this in goroutine
+					<-time.After(10 * time.Second)
+					compressionProgressMap.Delete(token)
+				}()
+			} else {
+				writeJsonStringRes(w, "{\"success\":true}")
 			}
 		}
-		connector.Info("server.files.compress", "ip", GetIP(r), "user", user, "server", id,
-			"archive", clean(r.URL.Query().Get("path")), "archiveType", archiveType,
-			"compression", compression, "files", files)
-		writeJsonStringRes(w, "{\"success\":true}")
+		if async {
+			compressionProgressMap.Store(token, "")
+			writeJsonStringRes(w, "{\"token\":\""+token+"\"}")
+			go completionFunc()
+		} else {
+			completionFunc()
+		}
 	}
 	connector.Router.HandleFunc("/server/{id}/compress", compressionEndpoint)
 	connector.Router.HandleFunc("/server/{id}/compress/v2", compressionEndpoint)
