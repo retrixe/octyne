@@ -353,8 +353,8 @@ func (connector *Connector) registerFileRoutes() {
 		}
 	})
 
-	// POST /server/{id}/compress?path=path&compress=true/false/zstd/xz/gzip&archiveType=zip/tar
-	// POST /server/{id}/compress/v2?path=path&compress=true/false/zstd/xz/gzip&archiveType=zip/tar
+	// POST /server/{id}/compress?path=path&compress=true/false/zstd/xz/gzip&archiveType=zip/tar&basePath=path
+	// POST /server/{id}/compress/v2?path=path&compress=true/false/zstd/xz/gzip&archiveType=zip/tar&basePath=path
 	compressionEndpoint := func(w http.ResponseWriter, r *http.Request) {
 		// Check with authenticator.
 		user := connector.Validate(w, r)
@@ -373,6 +373,7 @@ func (connector *Connector) registerFileRoutes() {
 			return
 		}
 		// Decode parameters.
+		basePath := r.URL.Query().Get("basePath")
 		archiveType := "zip"
 		compression := "true"
 		if r.URL.Query().Get("archiveType") != "" {
@@ -406,8 +407,12 @@ func (connector *Connector) registerFileRoutes() {
 		// Validate every path.
 		process.ServerConfigMutex.RLock()
 		defer process.ServerConfigMutex.RUnlock()
+		if !strings.HasPrefix(joinPath(process.Directory, basePath), clean(process.Directory)) {
+			httpError(w, "The base path is outside the server directory!", http.StatusForbidden)
+			return
+		}
 		for _, file := range files {
-			filepath := joinPath(process.Directory, file)
+			filepath := joinPath(process.Directory, basePath, file)
 			if !strings.HasPrefix(filepath, clean(process.Directory)) {
 				httpError(w, "One of the paths provided is outside the server directory!", http.StatusForbidden)
 				return
@@ -445,9 +450,8 @@ func (connector *Connector) registerFileRoutes() {
 			archive := zip.NewWriter(archiveFile)
 			defer archive.Close()
 			// Archive stuff inside.
-			// TODO: Why is parent always process.Directory? Support different base path?
 			for _, file := range files {
-				err := system.AddFileToZip(archive, process.Directory, file, compression != "false")
+				err := system.AddFileToZip(archive, joinPath(process.Directory, basePath), file, compression != "false")
 				if err != nil {
 					log.Println("An error occurred when adding "+file+" to "+archivePath, "("+process.Name+")", err)
 					httpError(w, "Internal Server Error!", http.StatusInternalServerError)
@@ -469,7 +473,7 @@ func (connector *Connector) registerFileRoutes() {
 			}
 			defer archive.Close()
 			for _, file := range files {
-				err := system.AddFileToTar(archive, process.Directory, file)
+				err := system.AddFileToTar(archive, joinPath(process.Directory, basePath), file)
 				if err != nil {
 					log.Println("An error occurred when adding "+file+" to "+archivePath, "("+process.Name+")", err)
 					httpError(w, "Internal Server Error!", http.StatusInternalServerError)

@@ -43,7 +43,7 @@ Currently, possible errors are not documented. This will be done in the future. 
 - [POST /server/{id}/folder?path=path](#post-serveridfolderpathpath)
 - [DELETE /server/{id}/file?path=path](#delete-serveridfilepathpath)
 - [PATCH /server/{id}/file](#patch-serveridfile)
-- [POST /server/{id}/compress?path=path&compress=algorithm&archiveType=archiveType](#post-serveridcompresspathpathcompressalgorithmarchivetypearchivetype)
+- [POST /server/{id}/compress?path=path&compress=algorithm&archiveType=archiveType&basePath=path](#post-serveridcompresspathpathcompressalgorithmarchivetypearchivetypebasepathpath)
 - [POST /server/{id}/decompress?path=path](#post-serveriddecompresspathpath)
 
 ### GET /
@@ -453,15 +453,16 @@ Move or copy a file or folder in the working directory of the app.
 
 ---
 
-### POST /server/{id}/compress?path=path&compress=algorithm&archiveType=archiveType
+### POST /server/{id}/compress?path=path&compress=algorithm&archiveType=archiveType&basePath=path
 
 Compress files/folders in the working directory of the app into a ZIP or TAR archive. Support for `tar(.gz/xz/zst)` archives was added in v1.2+.
 
-⚠️ *Info:* The `POST /server/{id}/compress/v2` API is available as well, which is identical to this, but guaranteed to support `tar` archives, and can be used by API clients to ensure archives aren't accidentally created as ZIP files on older Octyne versions.
+⚠️ *Info:* The `POST /server/{id}/compress/v2` API is available as well, which is identical to this, but guaranteed to support `tar` archives and the `basePath` query parameter. The v2 endpoint can be used by API clients to ensure archives aren't accidentally created as ZIP files on older Octyne versions.
 
 **Request Query Parameters:**
 
 - `path` - The location to create the archive at. This is relative to the server's root directory.
+- `basePath` - Optional, default is `/`. The location containing all files in the request body. This is used as the archive's top-level directory, all file paths in the request body are calculated relative to `basePath`. Added in v1.2+.
 - `archiveType` - Optional, default is `zip`. This specifies the archive type to use, currently, `zip` and `tar` are supported. Added in v1.2+.
 - `compress` - Optional, default is `true`, possible values are `true`/`false`, and `gzip`/`zstd`/`xz` for `tar` archives. This specifies whether or not to compress files/folders in the archive. `true` corresponds to the default DEFLATE algorithm for `zip`, and GZIP for `tar`. ⚠️ *Warning:* This was broken in v1.0 (it accidentally used a header instead of query parameter), this was fixed in v1.1+.
 
