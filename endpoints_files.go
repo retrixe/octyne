@@ -518,7 +518,7 @@ func (connector *Connector) registerFileRoutes() {
 			}
 			connector.Info("server.files.compress", "ip", GetIP(r), "user", user, "server", id,
 				"archive", clean(r.URL.Query().Get("path")), "archiveType", archiveType,
-				"compression", compression, "files", files)
+				"compression", compression, "basePath", basePath, "files", files)
 			if async {
 				compressionProgressMap.Store(token, "finished")
 				go func() { // We want our previous Close() defers to call *now*, so we do this in goroutine
