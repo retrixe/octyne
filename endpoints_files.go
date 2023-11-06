@@ -33,6 +33,7 @@ func clean(pathToClean string) string {
 	return filepath.FromSlash(path.Clean(pathToClean))
 }
 
+// skipcq GO-R1005
 func (connector *Connector) registerFileRoutes() {
 	// GET /server/{id}/files?path=path
 	type serverFilesResponse struct {

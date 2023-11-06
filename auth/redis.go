@@ -18,8 +18,8 @@ type RedisAuthenticator struct {
 }
 
 // NewRedisAuthenticator initializes an authenticator using Redis for token storage.
-func NewRedisAuthenticator(url string) *RedisAuthenticator {
-	users := CreateUserStore()
+func NewRedisAuthenticator(usersJsonPath string, url string) *RedisAuthenticator {
+	users := CreateUserStore(usersJsonPath)
 	pool := &redis.Pool{
 		Wait:      true,
 		MaxIdle:   5,

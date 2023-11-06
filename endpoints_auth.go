@@ -15,6 +15,7 @@ import (
 	"github.com/retrixe/octyne/auth"
 )
 
+// skipcq GO-R1005
 func (connector *Connector) registerAuthRoutes() {
 	// GET /login
 	type loginResponse struct {
@@ -146,15 +147,15 @@ func (connector *Connector) registerAuthRoutes() {
 			return
 		}
 		var users map[string]string
-		contents, err := os.ReadFile("users.json")
+		contents, err := os.ReadFile(UsersJsonPath)
 		if err != nil {
-			log.Println("Error reading users.json when modifying accounts!", err)
+			log.Println("Error reading "+UsersJsonPath+" when modifying accounts!", err)
 			httpError(w, "Internal Server Error!", http.StatusInternalServerError)
 			return
 		}
 		err = json.Unmarshal(contents, &users)
 		if err != nil {
-			log.Println("Error parsing users.json when modifying accounts!", err)
+			log.Println("Error parsing "+UsersJsonPath+" when modifying accounts!", err)
 			httpError(w, "Internal Server Error!", http.StatusInternalServerError)
 			return
 		}
@@ -248,19 +249,19 @@ func (connector *Connector) registerAuthRoutes() {
 		}
 		usersJson, err := json.MarshalIndent(users, "", "  ")
 		if err != nil {
-			log.Println("Error serialising users.json when modifying accounts!")
+			log.Println("Error serialising " + UsersJsonPath + " when modifying accounts!")
 			httpError(w, "Internal Server Error!", http.StatusInternalServerError)
 			return
 		}
-		err = os.WriteFile("users.json~", []byte(string(usersJson)+"\n"), 0666)
+		err = os.WriteFile(UsersJsonPath+"~", []byte(string(usersJson)+"\n"), 0666)
 		if err != nil {
-			log.Println("Error writing to users.json when modifying accounts!")
+			log.Println("Error writing to " + UsersJsonPath + " when modifying accounts!")
 			httpError(w, "Internal Server Error!", http.StatusInternalServerError)
 			return
 		}
-		err = os.Rename("users.json~", "users.json")
+		err = os.Rename(UsersJsonPath+"~", UsersJsonPath)
 		if err != nil {
-			log.Println("Error writing to users.json when modifying accounts!")
+			log.Println("Error writing to " + UsersJsonPath + " when modifying accounts!")
 			httpError(w, "Internal Server Error!", http.StatusInternalServerError)
 			return
 		}

@@ -9,17 +9,17 @@ import (
 	"github.com/puzpuzpuz/xsync/v2"
 )
 
-func CreateUserStore() *xsync.MapOf[string, string] {
+func CreateUserStore(usersJsonPath string) *xsync.MapOf[string, string] {
 	var users = xsync.NewMapOf[string]()
-	initialFile, updates, err := readAndWatchFile("users.json")
+	initialFile, updates, err := readAndWatchFile(usersJsonPath)
 	if err != nil {
-		log.Println("An error occurred while attempting to read users.json! " + err.Error())
+		log.Println("An error occurred while reading " + usersJsonPath + "! " + err.Error())
 		return users
 	}
 	var usersJson map[string]string
 	err = json.Unmarshal(initialFile, &usersJson)
 	if err != nil {
-		log.Println("An error occurred while attempting to parse users.json! " + err.Error())
+		log.Println("An error occurred while parsing " + usersJsonPath + "! " + err.Error())
 		return users
 	}
 	for username, password := range usersJson {
@@ -31,7 +31,7 @@ func CreateUserStore() *xsync.MapOf[string, string] {
 			var usersJson map[string]string
 			err = json.Unmarshal(newFile, &usersJson)
 			if err != nil {
-				log.Println("An error occurred while attempting to parse users.json! " + err.Error())
+				log.Println("An error occurred while parsing " + usersJsonPath + "! " + err.Error())
 				continue
 			}
 			for username, password := range usersJson {
@@ -64,7 +64,7 @@ func readAndWatchFile(filePath string) ([]byte, chan []byte, error) {
 			time.Sleep(1 * time.Second)
 			newFile, err := os.ReadFile(filePath)
 			if err != nil {
-				log.Println("An error occurred while attempting to read users.json! " + err.Error())
+				log.Println("An error occurred while reading " + filePath + "! " + err.Error())
 				continue
 			}
 			if string(newFile) != string(file) {

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -28,16 +29,27 @@ func getPort(config *Config) string {
 }
 
 var info *log.Logger
+var ConfigJsonPath = "config.json"
+var UsersJsonPath = "users.json"
 
 func main() {
-	if len(os.Args) >= 2 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
-		println("octyne version " + OctyneVersion)
-		return
+	for _, arg := range os.Args {
+		if arg == "--help" || arg == "-h" {
+			println("Usage: " + os.Args[0] + " [--version] [--config=<path>] [--users=<path>]")
+			return
+		} else if strings.HasPrefix(arg, "--users=") {
+			UsersJsonPath = arg[8:]
+		} else if strings.HasPrefix(arg, "--config=") {
+			ConfigJsonPath = arg[9:]
+		} else if arg == "--version" || arg == "-v" {
+			println("octyne version " + OctyneVersion)
+			return
+		}
 	}
 
 	// Read config.
 	var config Config
-	contents, err := os.ReadFile("config.json")
+	contents, err := os.ReadFile(ConfigJsonPath)
 	if err != nil {
 		panic("An error occurred while attempting to read config! " + err.Error())
 	}

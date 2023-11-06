@@ -24,7 +24,9 @@ You might want to manage octyne using systemd on Linux systems, which can start 
 
 ## Configuration
 
-Octyne depends on two files in the same directory to get configuration from. Note that Octyne refers to apps as "servers" in the config and API for legacy reasons (due to originally being targeted towards web servers and Minecraft servers).
+Octyne depends on two files in the current working directory to get configuration from. Note that Octyne refers to apps as "servers" in the config and API for legacy reasons (due to originally being targeted towards web servers and Minecraft servers).
+
+The path to these files can be customised using the `--config=/path/to/config.json` and `--users=/path/to/users.json` CLI flags (if relative, resolved relative to the working directory).
 
 ### config.json
 

@@ -98,9 +98,9 @@ func InitializeConnector(config *Config) *Connector {
 	// Create an authenticator.
 	var authenticator auth.Authenticator
 	if config.Redis.Enabled {
-		authenticator = auth.NewRedisAuthenticator(config.Redis.URL)
+		authenticator = auth.NewRedisAuthenticator(UsersJsonPath, config.Redis.URL)
 	} else {
-		authenticator = auth.NewMemoryAuthenticator()
+		authenticator = auth.NewMemoryAuthenticator(UsersJsonPath)
 	}
 	// Create the connector.
 	connector := &Connector{
@@ -211,6 +211,7 @@ func writeJsonStructRes(w http.ResponseWriter, resp interface{}) error {
 	return json.NewEncoder(w).Encode(resp)
 }
 
+// skipcq GO-R1005
 func (connector *Connector) registerMiscRoutes() {
 	// GET /
 	connector.Router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -228,9 +229,9 @@ func (connector *Connector) registerMiscRoutes() {
 			return
 		}
 		if r.Method == "GET" {
-			contents, err := os.ReadFile("config.json")
+			contents, err := os.ReadFile(ConfigJsonPath)
 			if err != nil {
-				log.Println("Error reading config.json when user accessed /config!", err)
+				log.Println("Error reading "+ConfigJsonPath+" when user accessed /config!", err)
 				httpError(w, "Internal Server Error!", http.StatusInternalServerError)
 				return
 			}
@@ -255,15 +256,15 @@ func (connector *Connector) registerMiscRoutes() {
 				httpError(w, "Invalid JSON body!", http.StatusBadRequest)
 				return
 			}
-			err = os.WriteFile("config.json~", []byte(strings.TrimRight(origJson, "\n")+"\n"), 0666)
+			err = os.WriteFile(ConfigJsonPath+"~", []byte(strings.TrimRight(origJson, "\n")+"\n"), 0666)
 			if err != nil {
-				log.Println("Error writing to config.json when user modified config!")
+				log.Println("Error writing to " + ConfigJsonPath + " when user modified config!")
 				httpError(w, "Internal Server Error!", http.StatusInternalServerError)
 				return
 			}
-			err = os.Rename("config.json~", "config.json")
+			err = os.Rename(ConfigJsonPath+"~", ConfigJsonPath)
 			if err != nil {
-				log.Println("Error writing to config.json when user modified config!")
+				log.Println("Error writing to " + ConfigJsonPath + " when user modified config!")
 				httpError(w, "Internal Server Error!", http.StatusInternalServerError)
 				return
 			}
@@ -283,7 +284,7 @@ func (connector *Connector) registerMiscRoutes() {
 		}
 		// Read the new config.
 		var config Config
-		contents, err := os.ReadFile("config.json")
+		contents, err := os.ReadFile(ConfigJsonPath)
 		if err != nil {
 			log.Println("An error occurred while attempting to read config! " + err.Error())
 			httpError(w, "An error occurred while reading config!", http.StatusInternalServerError)
@@ -596,9 +597,9 @@ func (connector *Connector) UpdateConfig(config *Config) {
 		(usingRedis && redisAuthenticator.URL != config.Redis.URL) {
 		replaceableAuthenticator.Engine.Close() // Bypassing ReplaceableAuthenticator mutex Lock.
 		if config.Redis.Enabled {
-			replaceableAuthenticator.Engine = auth.NewRedisAuthenticator(config.Redis.URL)
+			replaceableAuthenticator.Engine = auth.NewRedisAuthenticator(UsersJsonPath, config.Redis.URL)
 		} else {
-			replaceableAuthenticator.Engine = auth.NewMemoryAuthenticator()
+			replaceableAuthenticator.Engine = auth.NewMemoryAuthenticator(UsersJsonPath)
 		}
 	}
 	// Add new processes.

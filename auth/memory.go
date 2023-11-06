@@ -13,8 +13,8 @@ type MemoryAuthenticator struct {
 }
 
 // NewMemoryAuthenticator initializes an authenticator using memory for token storage.
-func NewMemoryAuthenticator() Authenticator {
-	users := CreateUserStore()
+func NewMemoryAuthenticator(usersJsonPath string) Authenticator {
+	users := CreateUserStore(usersJsonPath)
 	return &MemoryAuthenticator{Tokens: xsync.NewMapOf[string](), Users: users}
 }
 
