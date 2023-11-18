@@ -32,6 +32,8 @@ var info *log.Logger
 var ConfigJsonPath = "config.json"
 var UsersJsonPath = "users.json"
 
+// TODO: This is a real problem, perform some code refactors!
+// skipcq GO-R1005
 func main() {
 	for _, arg := range os.Args {
 		if arg == "--help" || arg == "-h" {

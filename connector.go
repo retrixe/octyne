@@ -492,7 +492,7 @@ func (connector *Connector) registerMiscRoutes() {
 					} else if data == nil {
 						c.Close()
 						break
-					} else if _, ok := connector.Authenticator.GetUsers().Load(user); !ok {
+					} else if _, ok := connector.Authenticator.GetUsers().Load(user); !ok && r.RemoteAddr != "@" {
 						c.Close()
 						break
 					}
@@ -534,7 +534,7 @@ func (connector *Connector) registerMiscRoutes() {
 				if err != nil {
 					process.Clients.Delete(token)
 					break // The WebSocket connection has terminated.
-				} else if _, ok := connector.Authenticator.GetUsers().Load(user); !ok {
+				} else if _, ok := connector.Authenticator.GetUsers().Load(user); !ok && r.RemoteAddr != "@" {
 					process.Clients.Delete(token)
 					c.Close()
 					break
