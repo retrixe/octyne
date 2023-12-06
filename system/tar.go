@@ -20,6 +20,8 @@ func ExtractTarFile(tarFile string, location string) error {
 		return err
 	}
 	var reader io.Reader = file
+	// Select an appropriate decompression stream if necessary.
+	// Currently supported: gzip, bzip2, xz, zstd
 	if strings.HasSuffix(tarFile, ".gz") || strings.HasSuffix(tarFile, ".tgz") {
 		reader, err = gzip.NewReader(file)
 		if err != nil {
@@ -33,6 +35,8 @@ func ExtractTarFile(tarFile string, location string) error {
 	} else if strings.HasSuffix(tarFile, ".zst") || strings.HasSuffix(tarFile, ".tzst") {
 		reader = NativeCompressionReader(file, "zstd")
 	}
+
+	// Extract archive.
 	archive := tar.NewReader(reader)
 	for {
 		header, err := archive.Next()

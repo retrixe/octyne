@@ -6,3 +6,4 @@ enabled = true
 
   [analyzers.meta]
   import_paths = ["github.com/retrixe/octyne"]
+  cyclomatic_complexity_threshold = "very-high"

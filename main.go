@@ -32,8 +32,6 @@ var info *log.Logger
 var ConfigJsonPath = "config.json"
 var UsersJsonPath = "users.json"
 
-// TODO: This is a real problem, perform some code refactors!
-// skipcq GO-R1005
 func main() {
 	for _, arg := range os.Args {
 		if arg == "--help" || arg == "-h" {
@@ -118,40 +116,9 @@ func main() {
 		return
 	}
 	if config.UnixSocket.Enabled {
-		loc := filepath.Join(os.TempDir(), "octyne.sock."+port[1:])
-		if config.UnixSocket.Location != "" {
-			loc = config.UnixSocket.Location
-		}
-		err = os.RemoveAll(loc)
+		unixListener, err := ListenOnUnixSocket(port, config)
 		if err != nil {
-			log.Println("Error when unlinking Unix socket at "+loc+"!", err)
 			return
-		}
-		unixListener, err := net.Listen("unix", loc) // This unlinks the socket when closed by Serve().
-		if err != nil {
-			log.Println("Error when listening on Unix socket at "+loc+"!", err)
-			return
-		}
-		if config.UnixSocket.Group != "" {
-			if runtime.GOOS == "windows" {
-				log.Println("Error: Assigning Unix sockets to groups is not supported on Windows!")
-				return
-			}
-			group, err := user.LookupGroup(config.UnixSocket.Group)
-			if err != nil {
-				log.Println("Error when looking up Unix socket group owner: "+config.UnixSocket.Group, err)
-				return
-			}
-			gid, err := strconv.Atoi(group.Gid)
-			if err != nil {
-				log.Println("Error when getting Unix socket group owner '"+config.UnixSocket.Group+"' GID!", err)
-				return
-			}
-			err = os.Chown(loc, -1, gid)
-			if err != nil {
-				log.Println("Error when changing Unix socket group ownership to '"+config.UnixSocket.Group+"'!", err)
-				return
-			}
 		}
 		go (func() {
 			defer server.Close() // Close the TCP server if the Unix socket server fails.
@@ -181,4 +148,43 @@ func main() {
 	if err != nil && err != http.ErrServerClosed {
 		log.Println("Error when serving HTTP requests!", err) // skipcq: GO-S0904
 	}
+}
+
+func ListenOnUnixSocket(port string, config Config) (net.Listener, error) {
+	loc := filepath.Join(os.TempDir(), "octyne.sock."+port[1:])
+	if config.UnixSocket.Location != "" {
+		loc = config.UnixSocket.Location
+	}
+	err := os.RemoveAll(loc)
+	if err != nil {
+		log.Println("Error when unlinking Unix socket at "+loc+"!", err)
+		return nil, err
+	}
+	unixListener, err := net.Listen("unix", loc) // This unlinks the socket when closed by Serve().
+	if err != nil {
+		log.Println("Error when listening on Unix socket at "+loc+"!", err)
+		return nil, err
+	}
+	if config.UnixSocket.Group != "" {
+		if runtime.GOOS == "windows" {
+			log.Println("Error: Assigning Unix sockets to groups is not supported on Windows!")
+			return nil, err
+		}
+		group, err := user.LookupGroup(config.UnixSocket.Group)
+		if err != nil {
+			log.Println("Error when looking up Unix socket group owner: "+config.UnixSocket.Group, err)
+			return nil, err
+		}
+		gid, err := strconv.Atoi(group.Gid)
+		if err != nil {
+			log.Println("Error when getting Unix socket group owner '"+config.UnixSocket.Group+"' GID!", err)
+			return nil, err
+		}
+		err = os.Chown(loc, -1, gid)
+		if err != nil {
+			log.Println("Error when changing Unix socket group ownership to '"+config.UnixSocket.Group+"'!", err)
+			return nil, err
+		}
+	}
+	return unixListener, nil
 }
