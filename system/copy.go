@@ -8,19 +8,26 @@ import (
 	"path/filepath"
 )
 
-// Copy copies a file, symlink or folder from one place to another.
+// Copy copies a file, symlink or folder from one place to another atomically.
 func Copy(fromMode fs.FileMode, path string, dest string) error {
+	var err error = nil
 	switch fromMode & os.ModeType {
 	case os.ModeDir:
-		if err := os.MkdirAll(dest, 0777); err != nil {
-			return err
+		if err = os.MkdirAll(dest, 0777); err == nil {
+			err = CopyDirectory(path, dest)
 		}
-		return CopyDirectory(path, dest)
 	case os.ModeSymlink:
-		return CopySymLink(path, dest)
+		err = CopySymLink(path, dest)
 	default:
-		return CopyFile(path, dest)
+		err = CopyFile(path, dest)
 	}
+	if err != nil {
+		err1 := os.RemoveAll(dest)
+		if err1 != nil {
+			return fmt.Errorf("error removing partially copied file(s): %w\noriginal err: %w", err1, err)
+		}
+	}
+	return err
 }
 
 // CopyDirectory copies a folder from one place to another.
