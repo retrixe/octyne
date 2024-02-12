@@ -331,22 +331,21 @@ func consoleEndpoint(connector *Connector, w http.ResponseWriter, r *http.Reques
 			process.ConsoleLock.RLock()
 			defer process.ConsoleLock.RUnlock()
 			writeChannel <- process.Console
-			process.Clients.Store(token, writeChannel)
+			process.Clients.Store(writeChannel, token)
 		})()
 		// Read messages from the user and execute them.
 		for {
-			client, _ := process.Clients.Load(token)
-			// Another client has connected with the same token. Terminate existing connection.
-			if client != writeChannel {
+			_, ok := process.Clients.Load(writeChannel) // If gone, stop reading messages from client.
+			if !ok {
 				break
 			}
 			// Read messages from the user.
 			_, message, err := c.ReadMessage()
 			if err != nil {
-				process.Clients.Delete(token)
+				process.Clients.Delete(writeChannel)
 				break // The WebSocket connection has terminated.
 			} else if _, ok := connector.Authenticator.GetUsers().Load(user); !ok && r.RemoteAddr != "@" {
-				process.Clients.Delete(token)
+				process.Clients.Delete(writeChannel)
 				c.Close()
 				break
 			}

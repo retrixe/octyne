@@ -149,8 +149,8 @@ func (process *Process) MonitorProcess(connector *Connector) error {
 			"stopped/crashed, and has now been removed.")
 		if process, loaded := connector.Processes.LoadAndDelete(process.Name); loaded {
 			<-time.After(5 * time.Second)
-			process.Clients.Range(func(key string, ws chan interface{}) bool {
-				ws <- nil
+			process.Clients.Range(func(connection chan interface{}, token string) bool {
+				connection <- nil
 				return true
 			})
 			process.Clients.Clear()

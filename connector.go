@@ -54,7 +54,7 @@ func CreateZapLogger(config LoggingConfig) *zap.SugaredLogger {
 // ExposedProcess contains Process along with connected clients and cached output.
 type ExposedProcess struct {
 	*Process
-	Clients     *xsync.MapOf[string, chan interface{}]
+	Clients     *xsync.MapOf[chan interface{}, string]
 	Console     string
 	ConsoleLock sync.RWMutex
 }
@@ -175,7 +175,7 @@ func InitializeConnector(config *Config) *Connector {
 func (connector *Connector) AddProcess(proc *Process) {
 	process := &ExposedProcess{
 		Process: proc,
-		Clients: xsync.NewMapOf[string, chan interface{}](),
+		Clients: xsync.NewMapOf[chan interface{}, string](),
 		Console: "",
 	}
 	connector.Processes.Store(process.Name, process)
@@ -198,7 +198,7 @@ func (connector *Connector) AddProcess(proc *Process) {
 						process.Console = strings.Join(truncate[len(truncate)-2500:], "\n")
 					}
 					process.Console = process.Console + "\n" + m
-					process.Clients.Range(func(key string, connection chan interface{}) bool {
+					process.Clients.Range(func(connection chan interface{}, token string) bool {
 						connection <- m
 						return true
 					})
