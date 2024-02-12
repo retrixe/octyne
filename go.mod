@@ -7,7 +7,7 @@ require (
 	github.com/gorilla/handlers v1.4.2
 	github.com/gorilla/mux v1.7.4
 	github.com/gorilla/websocket v1.4.2
-	github.com/puzpuzpuz/xsync/v2 v2.4.0
+	github.com/puzpuzpuz/xsync/v3 v3.0.2
 	github.com/tailscale/hujson v0.0.0-20221223112325-20486734a56a
 	go.uber.org/zap v1.24.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1

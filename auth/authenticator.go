@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/puzpuzpuz/xsync/v2"
+	"github.com/puzpuzpuz/xsync/v3"
 )
 
 // Authenticator is used by Octyne's Connector to provide HTTP API authentication.

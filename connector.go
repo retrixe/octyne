@@ -13,7 +13,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
-	"github.com/puzpuzpuz/xsync/v2"
+	"github.com/puzpuzpuz/xsync/v3"
 	"github.com/retrixe/octyne/auth"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -51,8 +51,8 @@ func CreateZapLogger(config LoggingConfig) *zap.SugaredLogger {
 		zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()), w, zap.InfoLevel)).Sugar()
 }
 
-// An internal representation of Process along with the clients connected to it and its output.
-type managedProcess struct {
+// ExposedProcess contains Process along with connected clients and cached output.
+type ExposedProcess struct {
 	*Process
 	Clients     *xsync.MapOf[string, chan interface{}]
 	Console     string
@@ -73,7 +73,7 @@ type Connector struct {
 	*mux.Router
 	*websocket.Upgrader
 	*Logger
-	Processes *xsync.MapOf[string, *managedProcess]
+	Processes *xsync.MapOf[string, *ExposedProcess]
 	Tickets   *xsync.MapOf[string, Ticket]
 }
 
@@ -110,8 +110,8 @@ func InitializeConnector(config *Config) *Connector {
 	connector := &Connector{
 		Router:        mux.NewRouter().StrictSlash(true),
 		Logger:        &Logger{LoggingConfig: config.Logging, Zap: CreateZapLogger(config.Logging)},
-		Processes:     xsync.NewMapOf[*managedProcess](),
-		Tickets:       xsync.NewMapOf[Ticket](),
+		Processes:     xsync.NewMapOf[string, *ExposedProcess](),
+		Tickets:       xsync.NewMapOf[string, Ticket](),
 		Authenticator: &auth.ReplaceableAuthenticator{Engine: authenticator},
 		Upgrader:      &websocket.Upgrader{Subprotocols: []string{"console-v2"}},
 	}
@@ -173,9 +173,9 @@ func InitializeConnector(config *Config) *Connector {
 
 // AddProcess adds a process to the connector to be accessed via the HTTP API.
 func (connector *Connector) AddProcess(proc *Process) {
-	process := &managedProcess{
+	process := &ExposedProcess{
 		Process: proc,
-		Clients: xsync.NewMapOf[chan interface{}](),
+		Clients: xsync.NewMapOf[string, chan interface{}](),
 		Console: "",
 	}
 	connector.Processes.Store(process.Name, process)
@@ -263,7 +263,7 @@ func (connector *Connector) UpdateConfig(config *Config) {
 		}
 	}
 	// Modify/remove existing processes.
-	connector.Processes.Range(func(key string, value *managedProcess) bool {
+	connector.Processes.Range(func(key string, value *ExposedProcess) bool {
 		serverConfig, ok := config.Servers[key]
 		if ok {
 			value.Process.ServerConfigMutex.Lock()

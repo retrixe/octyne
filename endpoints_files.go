@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/puzpuzpuz/xsync/v2"
+	"github.com/puzpuzpuz/xsync/v3"
 	"github.com/retrixe/octyne/system"
 )
 
@@ -212,7 +212,7 @@ func fileEndpointPost(connector *Connector, w http.ResponseWriter, r *http.Reque
 }
 
 func fileEndpointPatch(connector *Connector, w http.ResponseWriter, r *http.Request,
-	process *managedProcess, id string, user string) {
+	process *ExposedProcess, id string, user string) {
 	// Get the request body to check the operation.
 	var body bytes.Buffer
 	_, err := body.ReadFrom(r.Body)
@@ -380,7 +380,7 @@ func folderEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request
 // GET /server/{id}/compress?token=token
 // POST /server/{id}/compress?path=path&compress=true/false/zstd/xz/gzip&archiveType=zip/tar&basePath=path&async=boolean
 // POST /server/{id}/compress/v2?path=path&compress=true/false/zstd/xz/gzip&archiveType=zip/tar&basePath=path&async=boolean
-var compressionProgressMap = xsync.NewMapOf[string]()
+var compressionProgressMap = xsync.NewMapOf[string, string]()
 
 func compressionEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request) {
 	// Check with authenticator.

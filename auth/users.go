@@ -6,11 +6,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/puzpuzpuz/xsync/v2"
+	"github.com/puzpuzpuz/xsync/v3"
 )
 
 func CreateUserStore(usersJsonPath string) *xsync.MapOf[string, string] {
-	var users = xsync.NewMapOf[string]()
+	var users = xsync.NewMapOf[string, string]()
 	initialFile, updates, err := readAndWatchFile(usersJsonPath)
 	if err != nil {
 		log.Println("An error occurred while reading " + usersJsonPath + "! " + err.Error())

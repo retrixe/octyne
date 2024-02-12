@@ -3,7 +3,7 @@ package auth
 import (
 	"net/http"
 
-	"github.com/puzpuzpuz/xsync/v2"
+	"github.com/puzpuzpuz/xsync/v3"
 )
 
 // MemoryAuthenticator is an Authenticator implementation using an array to store tokens.
@@ -15,7 +15,7 @@ type MemoryAuthenticator struct {
 // NewMemoryAuthenticator initializes an authenticator using memory for token storage.
 func NewMemoryAuthenticator(usersJsonPath string) Authenticator {
 	users := CreateUserStore(usersJsonPath)
-	return &MemoryAuthenticator{Tokens: xsync.NewMapOf[string](), Users: users}
+	return &MemoryAuthenticator{Tokens: xsync.NewMapOf[string, string](), Users: users}
 }
 
 // GetUsers returns a Map with all the users and their corresponding passwords.

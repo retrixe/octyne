@@ -147,13 +147,13 @@ func (process *Process) MonitorProcess(connector *Connector) error {
 	if process.ToDelete.Load() {
 		process.SendConsoleOutput("[Octyne] Server " + process.Name + " was marked for deletion, " +
 			"stopped/crashed, and has now been removed.")
-		if managedProcess, loaded := connector.Processes.LoadAndDelete(process.Name); loaded {
+		if process, loaded := connector.Processes.LoadAndDelete(process.Name); loaded {
 			<-time.After(5 * time.Second)
-			managedProcess.Clients.Range(func(key string, ws chan interface{}) bool {
+			process.Clients.Range(func(key string, ws chan interface{}) bool {
 				ws <- nil
 				return true
 			})
-			managedProcess.Clients.Clear()
+			process.Clients.Clear()
 		}
 	} else if process.Command.ProcessState.Success() ||
 		process.Online.Load() == 0 /* SIGKILL (if done by Octyne) */ ||

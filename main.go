@@ -83,7 +83,7 @@ func main() {
 		} else if err := connector.Logger.Zap.Sync(); err != nil {
 			log.Println("Error when syncing the logger!", err)
 		}
-		// TODO: connector.Processes.Range(func(key string, value *managedProcess) bool { value.StopProcess() })
+		// TODO: connector.Processes.Range(func(key string, value *ExposedProcess) bool { value.StopProcess() })
 		os.Exit(exitCode)
 	})()
 

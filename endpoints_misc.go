@@ -124,7 +124,7 @@ func serversEndpoint(connector *Connector, w http.ResponseWriter, r *http.Reques
 	}
 	// Get a map of processes and their online status.
 	processes := make(map[string]interface{})
-	connector.Processes.Range(func(k string, v *managedProcess) bool {
+	connector.Processes.Range(func(k string, v *ExposedProcess) bool {
 		if r.URL.Query().Get("extrainfo") == "true" {
 			processes[v.Name] = map[string]interface{}{
 				"status":   v.Online.Load(),
@@ -175,7 +175,7 @@ func serverEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request
 	}
 }
 
-func serverEndpointGet(w http.ResponseWriter, process *managedProcess) {
+func serverEndpointGet(w http.ResponseWriter, process *ExposedProcess) {
 	// Get the PID of the process.
 	var stat system.ProcessStats
 	process.CommandMutex.RLock()
@@ -211,7 +211,7 @@ func serverEndpointGet(w http.ResponseWriter, process *managedProcess) {
 }
 
 func serverEndpointPost(connector *Connector, w http.ResponseWriter, r *http.Request,
-	process *managedProcess, id string, user string) {
+	process *ExposedProcess, id string, user string) {
 	// Get the request body to check whether the operation is to START or STOP.
 	var body bytes.Buffer
 	_, err := body.ReadFrom(r.Body)

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/gomodule/redigo/redis"
-	"github.com/puzpuzpuz/xsync/v2"
+	"github.com/puzpuzpuz/xsync/v3"
 )
 
 // RedisAuthenticator is an Authenticator implementation using Redis to store tokens.
