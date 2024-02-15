@@ -16,3 +16,8 @@ func IsFileLocked(err error) bool {
 	return linkErr.Err != nil && linkErr.Err.Error() ==
 		"The process cannot access the file because it is being used by another process."
 }
+
+// CanDeleteFolder checks if a folder can be deleted, checking its children recursively.
+func CanDeleteFolder(_ string) (int, string) {
+	return 0, "" // TODO: Currently Windows ACLs are not supported.
+}
