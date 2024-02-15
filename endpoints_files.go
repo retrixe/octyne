@@ -32,6 +32,15 @@ func clean(pathToClean string) string {
 	return filepath.FromSlash(path.Clean(pathToClean))
 }
 
+func isFileLocked(err error) bool {
+	linkErr, ok := err.(*os.LinkError)
+	if !ok {
+		return false
+	}
+	return linkErr.Err != nil && linkErr.Err.Error() ==
+		"The process cannot access the file because it is being used by another process."
+}
+
 // GET /server/{id}/files?path=path
 type serverFilesResponse struct {
 	Name         string `json:"name"`
@@ -43,7 +52,8 @@ type serverFilesResponse struct {
 
 func filesEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request) {
 	// Check with authenticator.
-	if connector.ValidateAndReject(w, r) == "" {
+	user := connector.ValidateAndReject(w, r)
+	if user == "" {
 		return
 	}
 	// Get the process being accessed.
@@ -54,6 +64,14 @@ func filesEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request)
 		httpError(w, "This server does not exist!", http.StatusNotFound)
 		return
 	}
+	if r.Method == "GET" {
+		filesEndpointGet(w, r, process)
+	} else {
+		httpError(w, "Only GET and PATCH are allowed!", http.StatusMethodNotAllowed)
+	}
+}
+
+func filesEndpointGet(w http.ResponseWriter, r *http.Request, process *ExposedProcess) {
 	// Check if folder is in the process directory or not.
 	process.ServerConfigMutex.RLock()
 	defer process.ServerConfigMutex.RUnlock()
@@ -105,6 +123,13 @@ func filesEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request)
 		})
 	}
 	writeJsonStructRes(w, toSend) // skipcq GSC-G104
+}
+
+type fileOperation struct {
+	Operation string `json:"operation"` // mv, cp, rm
+	Src       string `json:"src"`
+	Dest      string `json:"dest"`
+	Path      string `json:"path"`
 }
 
 // GET /server/{id}/file?path=path&ticket=ticket
@@ -221,11 +246,7 @@ func fileEndpointPatch(connector *Connector, w http.ResponseWriter, r *http.Requ
 	}
 	// If the body doesn't start with {, parse as a legacy request. Remove this in Octyne 2.0.
 	// Legacy requests will not support anything further than mv/cp operations.
-	var req struct {
-		Operation string `json:"operation"`
-		Src       string `json:"src"`
-		Dest      string `json:"dest"`
-	}
+	var req fileOperation
 	if strings.TrimSpace(body.String())[0] != '{' {
 		split := strings.Split(body.String(), "\n")
 		if len(split) != 3 {
@@ -276,8 +297,7 @@ func fileEndpointPatch(connector *Connector, w http.ResponseWriter, r *http.Requ
 		// Move file if operation is mv.
 		if req.Operation == "mv" {
 			err := os.Rename(oldpath, newpath)
-			if err != nil && err.(*os.LinkError).Err != nil && err.(*os.LinkError).Err.Error() ==
-				"The process cannot access the file because it is being used by another process." {
+			if err != nil && isFileLocked(err) {
 				httpError(w, err.(*os.LinkError).Err.Error(), http.StatusConflict)
 				return
 			} else if err != nil {
@@ -317,8 +337,7 @@ func fileEndpointDelete(connector *Connector, w http.ResponseWriter, r *http.Req
 		return
 	}
 	err = os.RemoveAll(filePath)
-	if err != nil && err.(*os.PathError).Err != nil && err.(*os.PathError).Err.Error() ==
-		"The process cannot access the file because it is being used by another process." {
+	if err != nil && isFileLocked(err) {
 		httpError(w, err.(*os.PathError).Err.Error(), http.StatusConflict)
 		return
 	} else if err != nil {
