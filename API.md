@@ -38,6 +38,7 @@ Currently, possible errors are not documented. This will be done in the future. 
 - [POST /server/{id}](#post-serverid)
 - [WS /server/{id}/console?ticket=ticket](#ws-serveridconsoleticketticket)
 - [GET /server/{id}/files?path=path](#get-serveridfilespathpath)
+- [PATCH /server/{id}/files](#patch-serveridfiles)
 - [GET /server/{id}/file?path=path&ticket=ticket](#get-serveridfilepathpathticketticket)
 - [POST /server/{id}/file?path=path](#post-serveridfilepathpath)
 - [POST /server/{id}/folder?path=path](#post-serveridfolderpathpath)
@@ -356,6 +357,44 @@ Example response:
   ]
 }
 ```
+
+---
+
+### PATCH /server/{id}/files
+
+A transactional file API for performing multiple file operations in a single request. Added in v1.3.
+
+⚠️ *Warning:* On older versions, this API endpoint would respond with the contents of the root folder (as if a `GET` request was made). An efficient way to check if the API is available is by passing `?path=..` with the request, which will error on older versions.
+
+Each transaction is performed in order, and if any operation fails, the entire transaction is rolled back. This is useful for ensuring that multiple file operations are performed atomically. Individual operations may depend upon each other as well.
+
+**Request Body:**
+
+```json
+{
+  "operations": [
+    { "operation": "mv", "src": "/config.json", "dest": "/config.json.old" },
+    { "operation": "cp", "src": "/config.json.old", "dest": "/config.json" },
+    { "operation": "rm", "path": "/config.json" }
+  ]
+}
+```
+
+**Response:**
+
+HTTP 200 JSON body response `{"success":true}` is returned on success. On failure, the response will be in the following format:
+
+```json
+{
+  "success": false,
+  "errors": [
+    { "index": 0, "message": "error message here" },
+    { "index": 2, "message": "error message here" }
+  ]
+}
+```
+
+If the status code is 400 Bad Request, the errors indicate validation errors in your request. Else, the HTTP status code and first error in the array belong to the first operation that failed in the transaction. If operations in the transaction rollback attempt fail, subsequent errors will be present and 500 Internal Server Error will always be returned. In such cases, something catastrophic has happened and manual intervention from the user is advised.
 
 ---
 
