@@ -43,7 +43,8 @@ type serverFilesResponse struct {
 
 func filesEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request) {
 	// Check with authenticator.
-	if connector.ValidateAndReject(w, r) == "" {
+	user := connector.ValidateAndReject(w, r)
+	if user == "" {
 		return
 	}
 	// Get the process being accessed.
@@ -54,6 +55,16 @@ func filesEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request)
 		httpError(w, "This server does not exist!", http.StatusNotFound)
 		return
 	}
+	if r.Method == "GET" {
+		filesEndpointGet(w, r, process)
+	} else if r.Method == "PATCH" {
+		filesEndpointPatch(connector, w, r, process, id, user)
+	} else {
+		httpError(w, "Only GET and PATCH are allowed!", http.StatusMethodNotAllowed)
+	}
+}
+
+func filesEndpointGet(w http.ResponseWriter, r *http.Request, process *ExposedProcess) {
 	// Check if folder is in the process directory or not.
 	process.ServerConfigMutex.RLock()
 	defer process.ServerConfigMutex.RUnlock()
@@ -105,6 +116,127 @@ func filesEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request)
 		})
 	}
 	writeJsonStructRes(w, toSend) // skipcq GSC-G104
+}
+
+type fileOperation struct {
+	Operation string `json:"operation"` // mv, cp, rm
+	Src       string `json:"src"`
+	Dest      string `json:"dest"`
+	Path      string `json:"path"`
+}
+
+type fileOperationError struct {
+	Index   int    `json:"index"`
+	Message string `json:"message"`
+}
+
+type filesEndpointPatchResponse struct {
+	Success bool                 `json:"success"`
+	Errors  []fileOperationError `json:"errors,omitempty"`
+}
+
+func filesEndpointPatch(connector *Connector, w http.ResponseWriter, r *http.Request,
+	process *ExposedProcess, id string, user string) {
+	// Parse all transactions
+	var req struct {
+		Operations []fileOperation `json:"operations"`
+	}
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		httpError(w, "Invalid JSON body!", http.StatusBadRequest)
+		return
+	}
+	response := filesEndpointPatchResponse{Errors: make([]fileOperationError, 0)}
+	// Validate all operations in the transaction.
+	// FIXME: Return multiple validation errors? Also, then we should modify the docs?
+	for index, operation := range req.Operations {
+		// Check operation validity.
+		if operation.Operation != "mv" && operation.Operation != "cp" && operation.Operation != "rm" {
+			response.Errors = append(response.Errors, fileOperationError{
+				Index:   index,
+				Message: "Invalid operation! Operations available: mv,cp,rm",
+			})
+		}
+		// Check if src/path exists within bounds of the server directory.
+		source := operation.Src
+		if operation.Operation == "rm" {
+			source = operation.Path
+		}
+		source = joinPath(process.Directory, source)
+		if !strings.HasPrefix(source, clean(process.Directory)) {
+			response.Errors = append(response.Errors, fileOperationError{
+				Index:   index,
+				Message: "The file(s) specified in src or path is outside the server!",
+			})
+		}
+		// Block src/path being server directory.
+		if source == clean(process.Directory) {
+			response.Errors = append(response.Errors, fileOperationError{
+				Index:   index,
+				Message: "The file(s) specified in src or path is the server directory itself!",
+			})
+		}
+		// Check if src/path exists.
+		_, err := os.Stat(source)
+		if os.IsNotExist(err) {
+			response.Errors = append(response.Errors, fileOperationError{
+				Index:   index,
+				Message: "The file(s) specified in src or path does not exist!",
+			})
+		} else if err != nil {
+			log.Println("An error occurred when checking if "+source+" exists in file transaction",
+				"("+process.Name+")", err)
+			response.Errors = append(response.Errors, fileOperationError{
+				Index:   index,
+				Message: "Internal server error attempting to access src/path!",
+			}) // FIXME: Not a validation error!
+			break // Better than flooding internal server errors.
+		}
+		// Set src/dest to resolved path.
+		if operation.Operation == "rm" {
+			operation.Path = source
+		} else {
+			operation.Src = source
+		}
+		if operation.Operation == "mv" || operation.Operation == "cp" {
+			// Resolve dest and check if dest exists within bounds of the server directory.
+			operation.Dest = joinPath(process.Directory, operation.Dest)
+			if !strings.HasPrefix(operation.Dest, clean(process.Directory)) {
+				response.Errors = append(response.Errors, fileOperationError{
+					Index:   index,
+					Message: "The file(s) requested in dest is outside the server!",
+				})
+			}
+			// FIXME: Check if the path containing dest exists.
+			// FIXME: Check if src contains dest (this may lead to infinite recursion).
+		}
+	}
+	// FIXME: Check if an operation modifies a file that was moved/deleted previously and not recreated.
+	// FIXME: Lock all files being modified (if possible on platform)
+	// FIXME: Begin executing all operations
+	// FIXME: Should any operation fail, begin a revert
+	// TODO:  Should any revert operation fail, return additional errors and try further reverts?
+	//        Any reverts dependent on failed reverted must be thrown as an error
+	//        e.g. "Dependent on failed revert to operation X"
+	// FIXME: Log the transaction
+	/* TODO:
+	**Response:**
+	HTTP 200 JSON body response `{"success":true}` is returned on success. On failure, the response will be in the following format:
+
+	{
+	  "success": false,
+	  "errors": [
+	    { "index": 0, "error": "error message here" },
+	    { "index": 2, "error": "error message here" }
+	  ]
+	}
+
+	If the status code is 400 Bad Request, the errors indicate validation errors in your request.
+	Else, the HTTP status code and first error in the array belong to the first operation that failed
+	in the transaction. If operations in the transaction rollback attempt fail, subsequent errors will
+	be present and 500 Internal Server Error will always be returned. In such cases, something
+	catastrophic has happened and manual intervention from the user is advised.
+	*/
 }
 
 // GET /server/{id}/file?path=path&ticket=ticket
@@ -221,11 +353,7 @@ func fileEndpointPatch(connector *Connector, w http.ResponseWriter, r *http.Requ
 	}
 	// If the body doesn't start with {, parse as a legacy request. Remove this in Octyne 2.0.
 	// Legacy requests will not support anything further than mv/cp operations.
-	var req struct {
-		Operation string `json:"operation"`
-		Src       string `json:"src"`
-		Dest      string `json:"dest"`
-	}
+	var req fileOperation
 	if strings.TrimSpace(body.String())[0] != '{' {
 		split := strings.Split(body.String(), "\n")
 		if len(split) != 3 {
