@@ -15,6 +15,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -57,6 +58,8 @@ func filesEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request)
 	}
 	if r.Method == "GET" {
 		filesEndpointGet(w, r, process)
+	} else if r.Method == "PATCH" {
+		filesEndpointPatch(connector, w, r, process, id, user)
 	} else {
 		httpError(w, "Only GET and PATCH are allowed!", http.StatusMethodNotAllowed)
 	}
@@ -121,6 +124,214 @@ type fileOperation struct {
 	Src       string `json:"src"`
 	Dest      string `json:"dest"`
 	Path      string `json:"path"`
+}
+
+type fileOperationError struct {
+	Index   int    `json:"index"`
+	Message string `json:"message"`
+}
+
+type filesEndpointPatchResponse struct {
+	Success bool                 `json:"success"`
+	Errors  []fileOperationError `json:"errors,omitempty"`
+}
+
+func validateFileOperation(operation *fileOperation, process *ExposedProcess) string {
+	if operation.Operation != "mv" && operation.Operation != "cp" && operation.Operation != "rm" {
+		return "Invalid operation! Operations available: mv,cp,rm"
+	}
+	// Check if src/path exists within bounds of the server directory.
+	source := operation.Src
+	if operation.Operation == "rm" {
+		source = operation.Path
+	}
+	source = joinPath(process.Directory, source)
+	if !strings.HasPrefix(source, clean(process.Directory)) || source == clean(process.Directory) {
+		return "The file(s) specified in src/path is outside the server!"
+	}
+	if operation.Operation == "rm" {
+		operation.Path = source
+	} else {
+		operation.Src = source
+	}
+	if operation.Operation == "mv" || operation.Operation == "cp" {
+		// Resolve dest and check if dest exists within bounds of the server directory.
+		operation.Dest = joinPath(process.Directory, operation.Dest)
+		if !strings.HasPrefix(operation.Dest, clean(process.Directory)) ||
+			operation.Dest == clean(process.Directory) {
+			return "The path(s) specified in dest is outside the server!"
+		}
+	}
+	return ""
+}
+
+func performMoveCopyOperation(operation *fileOperation) (int, string) {
+	// Validate source
+	srcStat, err := os.Stat(operation.Src)
+	if err != nil && os.IsNotExist(err) {
+		return 400, "The file specified in src does not exist!"
+	} else if err != nil {
+		return 500, "Internal Server Error! " + err.Error()
+	}
+
+	// Validate destination
+	destStat, err := os.Stat(operation.Dest)
+	if err == nil && (destStat.IsDir() || srcStat.IsDir()) {
+		return 400, "The destination already exists, and either src or dest are folders!"
+	} else if err != nil && !os.IsNotExist(err) {
+		return 500, "Internal Server Error! " + err.Error()
+	}
+
+	// Perform move/copy operation
+	if operation.Operation == "mv" {
+		err = os.Rename(operation.Src, operation.Dest)
+	} else {
+		err = system.Copy(srcStat.Mode(), operation.Src, operation.Dest)
+	}
+	if err != nil && system.IsFileLocked(err) {
+		return 409, err.(*os.LinkError).Err.Error()
+	} else if err != nil {
+		return 500, "Internal Server Error! " + err.Error()
+	}
+	return 0, ""
+}
+
+func performRemoveOperation(operation *fileOperation) (int, string) {
+	// Check permissions in all subfolders
+	errStatus, errMsg := system.CanDeleteFolder(operation.Path)
+	if errStatus != 0 {
+		return errStatus, errMsg
+	}
+
+	// Move file/folder to temporary deletion folder
+	err := os.Rename(operation.Path, operation.Dest)
+	if err != nil && system.IsFileLocked(err) {
+		return 409, err.(*os.LinkError).Err.Error()
+	} else if err != nil && os.IsNotExist(err) {
+		return 400, "The file specified in path does not exist!"
+	} else if err != nil {
+		return 500, "Internal Server Error! " + err.Error()
+	}
+	return 0, ""
+}
+
+func filesEndpointPatch(
+	connector *Connector, w http.ResponseWriter, r *http.Request,
+	process *ExposedProcess, id string, user string,
+) {
+	// Parse all transactions
+	var req struct {
+		Operations []fileOperation `json:"operations"`
+	}
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		httpError(w, "Invalid JSON body!", http.StatusBadRequest)
+		return
+	}
+
+	// Validate all operations in the transaction.
+	response := filesEndpointPatchResponse{Errors: make([]fileOperationError, 0)}
+	for index := range req.Operations {
+		errMsg := validateFileOperation(&req.Operations[index], process)
+		if errMsg != "" {
+			w.WriteHeader(http.StatusBadRequest)
+			response.Errors = append(response.Errors, fileOperationError{
+				Index:   index,
+				Message: errMsg,
+			})
+			break
+		}
+	}
+	if len(response.Errors) != 0 {
+		writeJsonStructRes(w, response)
+		return
+	}
+
+	// TODO: Perhaps we should lock all files on the Windows platform?
+
+	responseStatus := 200
+	var index int
+	var operation fileOperation
+	var removeTmpFolder string
+	// Begin executing all operations sequentially
+	for index, operation = range req.Operations {
+		if operation.Operation == "cp" || operation.Operation == "mv" {
+			errStatus, errMsg := performMoveCopyOperation(&operation)
+			if errStatus != 0 {
+				responseStatus = errStatus
+				response.Errors = append(response.Errors, fileOperationError{
+					Index:   index,
+					Message: errMsg,
+				})
+				break
+			}
+		} else if operation.Operation == "rm" {
+			// Create temporary folder for deletions
+			if removeTmpFolder == "" {
+				removeTmpFolder, err = os.MkdirTemp(process.Directory, ".octyne-transaction-")
+				if err != nil {
+					responseStatus = 500
+					response.Errors = append(response.Errors, fileOperationError{
+						Index:   index,
+						Message: "Internal Server Error! " + err.Error(),
+					})
+					break
+				}
+			}
+			operation.Dest = joinPath(removeTmpFolder, strconv.Itoa(index))
+
+			errStatus, errMsg := performRemoveOperation(&operation)
+			if errStatus != 0 {
+				responseStatus = errStatus
+				response.Errors = append(response.Errors, fileOperationError{
+					Index:   index,
+					Message: errMsg,
+				})
+				break
+			}
+		}
+	}
+
+	// Begin a revert upon failure
+	if responseStatus != 200 {
+		for revertIndex := index - 1; revertIndex >= 0; revertIndex-- {
+			source := req.Operations[revertIndex].Src
+			if req.Operations[revertIndex].Operation == "rm" {
+				source = req.Operations[revertIndex].Path
+			}
+			err = os.Rename(req.Operations[revertIndex].Dest, source)
+			if err != nil {
+				responseStatus = 500
+				response.Errors = append(response.Errors, fileOperationError{
+					Index:   revertIndex,
+					Message: "Internal Server Error! " + err.Error(),
+				})
+			}
+		}
+	}
+
+	// Delete the folder containing deletions
+	if removeTmpFolder != "" && len(response.Errors) < 2 { // Reverts completed/Success
+		err = os.RemoveAll(removeTmpFolder)
+		if err != nil {
+			responseStatus = 500
+			response.Errors = append(response.Errors, fileOperationError{
+				Index:   -1,
+				Message: "Internal Server Error! " + err.Error(),
+			})
+		}
+	}
+
+	if len(response.Errors) == 0 {
+		connector.Info("server.files.bulk", "ip", GetIP(r), "user", user, "server", id,
+			"operations", req.Operations)
+	} else if len(response.Errors) > 1 {
+		connector.Info("server.files.bulk", "ip", GetIP(r), "user", user, "server", id,
+			"operations", req.Operations, "errors", response.Errors)
+	}
+
+	w.WriteHeader(responseStatus)
+	writeJsonStructRes(w, response)
 }
 
 // GET /server/{id}/file?path=path&ticket=ticket
@@ -255,16 +466,17 @@ func fileEndpointPatch(connector *Connector, w http.ResponseWriter, r *http.Requ
 		httpError(w, "Invalid JSON body!", http.StatusBadRequest)
 		return
 	}
+	// Validate operation
+	errMsg := validateFileOperation(&req, process)
+	if errMsg != "" {
+		httpError(w, errMsg, http.StatusBadRequest)
+		return
+	}
 	// Possible operations: mv, cp
 	if req.Operation == "mv" || req.Operation == "cp" {
+		oldpath := req.Src
+		newpath := req.Dest
 		// Check if original file exists.
-		oldpath := joinPath(process.Directory, req.Src)
-		newpath := joinPath(process.Directory, req.Dest)
-		if !strings.HasPrefix(oldpath, clean(process.Directory)) ||
-			!strings.HasPrefix(newpath, clean(process.Directory)) {
-			httpError(w, "The files requested are outside the server!", http.StatusForbidden)
-			return
-		}
 		stat, err := os.Stat(oldpath)
 		if os.IsNotExist(err) {
 			httpError(w, "This file does not exist!", http.StatusNotFound)
