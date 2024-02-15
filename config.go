@@ -80,6 +80,15 @@ type ServerConfig struct {
 	Enabled   bool   `json:"enabled"`
 	Directory string `json:"directory"`
 	Command   string `json:"command"`
+	/* {
+	  "EXPERIMENTAL_docker": {
+	    "image": "openjdk:17",
+	    "expose": ["25565:25565"],
+	    "net": "host",
+	    "volume": ["/home/mc/minecraft/Hub/plugins:/home/mc/minecraft/Hub/plugins"]
+	  }
+	} */
+	Docker map[string]interface{} `json:"EXPERIMENTAL_docker"`
 }
 
 // UnmarshalJSON unmarshals ServerConfig and sets default values.

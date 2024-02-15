@@ -60,6 +60,39 @@ func (process *Process) StartProcess(connector *Connector) error {
 	defer process.ServerConfigMutex.RUnlock()
 	// Determine the command which should be run by Go and change the working directory.
 	cmd := strings.Split(process.ServerConfig.Command, " ")
+	if image, ok := process.ServerConfig.Docker["image"].(string); ok && image != "" {
+		dockerPath, err := exec.LookPath("podman")
+		if err != nil {
+			dockerPath, err = exec.LookPath("docker")
+			if err != nil {
+				log.Println("Failed to start server " + name + "! The following error occured: " +
+					"neither podman nor docker were found in your PATH.")
+				return err
+			}
+		}
+		selinuxEnabled := exec.Command("selinuxenabled").Run() == nil
+		port := "42069" //FIXME
+		cmd = []string{dockerPath, "run", "--rm", "-it", "--name", "octyne_" + port + "_" + name}
+		for key, value := range process.ServerConfig.Docker {
+			if key == "image" {
+				continue
+			} else if value == nil || value == "" {
+				cmd = append(cmd, "--"+key)
+			} else if str, ok := value.(string); ok {
+				cmd = append(cmd, "--"+key, str)
+			} else if arr, ok := value.([]string); ok {
+				for _, item := range arr {
+					cmd = append(cmd, "--"+key, item)
+				}
+			}
+		}
+		mount := ".:/opt"
+		if selinuxEnabled {
+			mount = mount + ":Z"
+		}
+		cmd = append(cmd, []string{"--volume", mount, "--workdir", "/opt", image}...)
+		cmd = append(cmd, strings.Split(process.ServerConfig.Command, " ")...)
+	}
 	command := exec.Command(cmd[0], cmd[1:]...)
 	command.Dir = process.Directory
 	// Run the command after retrieving the standard out, standard in and standard err.
