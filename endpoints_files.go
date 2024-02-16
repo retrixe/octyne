@@ -18,7 +18,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gorilla/mux"
 	"github.com/puzpuzpuz/xsync/v3"
 	"github.com/retrixe/octyne/system"
 )
@@ -48,7 +47,7 @@ func filesEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request)
 		return
 	}
 	// Get the process being accessed.
-	id := mux.Vars(r)["id"]
+	id := r.PathValue("id")
 	process, err := connector.Processes.Load(id)
 	// In case the process doesn't exist.
 	if !err {
@@ -121,7 +120,7 @@ func fileEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	// Get the process being accessed.
-	id := mux.Vars(r)["id"]
+	id := r.PathValue("id")
 	process, err := connector.Processes.Load(id)
 	// In case the process doesn't exist.
 	if !err {
@@ -340,7 +339,7 @@ func folderEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request
 		return
 	}
 	// Get the process being accessed.
-	id := mux.Vars(r)["id"]
+	id := r.PathValue("id")
 	process, err := connector.Processes.Load(id)
 	// In case the process doesn't exist.
 	if !err {
@@ -389,7 +388,7 @@ func compressionEndpoint(connector *Connector, w http.ResponseWriter, r *http.Re
 		return
 	}
 	// Get the process being accessed.
-	id := mux.Vars(r)["id"]
+	id := r.PathValue("id")
 	process, exists := connector.Processes.Load(id)
 	// In case the process doesn't exist.
 	if !exists {
@@ -567,7 +566,7 @@ func decompressionEndpoint(connector *Connector, w http.ResponseWriter, r *http.
 		return
 	}
 	// Get the process being accessed.
-	id := mux.Vars(r)["id"]
+	id := r.PathValue("id")
 	process, err := connector.Processes.Load(id)
 	// In case the process doesn't exist.
 	if !err {

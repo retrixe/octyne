@@ -102,7 +102,7 @@ func main() {
 		}),
 		handlers.AllowedMethods([]string{"GET", "POST", "PUT", "HEAD", "OPTIONS", "PATCH", "DELETE"}),
 		handlers.AllowedOrigins([]string{"*"}),
-	)(connector.Router)
+	)(http.DefaultServeMux)
 	server := &http.Server{
 		Addr:              port,
 		Handler:           handler,

@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	"github.com/retrixe/octyne/auth"
 	"github.com/retrixe/octyne/system"
@@ -159,7 +158,7 @@ func serverEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request
 		return
 	}
 	// Get the process being accessed.
-	id := mux.Vars(r)["id"]
+	id := r.PathValue("id")
 	process, err := connector.Processes.Load(id)
 	// In case the process doesn't exist.
 	if !err {
@@ -269,7 +268,7 @@ func consoleEndpoint(connector *Connector, w http.ResponseWriter, r *http.Reques
 		token = ticket.Token
 	}
 	// Get the server being accessed.
-	id := mux.Vars(r)["id"]
+	id := r.PathValue("id")
 	process, exists := connector.Processes.Load(id)
 	// In case the server doesn't exist.
 	if !exists {

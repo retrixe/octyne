@@ -1,11 +1,10 @@
 module github.com/retrixe/octyne
 
-go 1.18
+go 1.22
 
 require (
 	github.com/gomodule/redigo v2.0.0+incompatible
 	github.com/gorilla/handlers v1.4.2
-	github.com/gorilla/mux v1.7.4
 	github.com/gorilla/websocket v1.4.2
 	github.com/puzpuzpuz/xsync/v3 v3.0.2
 	github.com/tailscale/hujson v0.0.0-20221223112325-20486734a56a

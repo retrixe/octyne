@@ -11,7 +11,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	"github.com/puzpuzpuz/xsync/v3"
 	"github.com/retrixe/octyne/auth"
@@ -70,7 +69,6 @@ type Ticket struct {
 // Connector is used to create an HTTP API for external apps to talk with octyne.
 type Connector struct {
 	auth.Authenticator
-	*mux.Router
 	*websocket.Upgrader
 	*Logger
 	Processes *xsync.MapOf[string, *ExposedProcess]
@@ -108,7 +106,6 @@ func InitializeConnector(config *Config) *Connector {
 	}
 	// Create the connector.
 	connector := &Connector{
-		Router:        mux.NewRouter().StrictSlash(true),
 		Logger:        &Logger{LoggingConfig: config.Logging, Zap: CreateZapLogger(config.Logging)},
 		Processes:     xsync.NewMapOf[string, *ExposedProcess](),
 		Tickets:       xsync.NewMapOf[string, Ticket](),
@@ -149,25 +146,25 @@ func InitializeConnector(config *Config) *Connector {
 		POST /server/{id}/decompress?path=path
 	*/
 
-	connector.Handle("/login", WrapEndpointWithCtx(connector, loginEndpoint))
-	connector.Handle("/logout", WrapEndpointWithCtx(connector, logoutEndpoint))
-	connector.Handle("/ott", WrapEndpointWithCtx(connector, ottEndpoint))
-	connector.Handle("/accounts", WrapEndpointWithCtx(connector, accountsEndpoint))
+	http.Handle("/login", WrapEndpointWithCtx(connector, loginEndpoint))
+	http.Handle("/logout", WrapEndpointWithCtx(connector, logoutEndpoint))
+	http.Handle("/ott", WrapEndpointWithCtx(connector, ottEndpoint))
+	http.Handle("/accounts", WrapEndpointWithCtx(connector, accountsEndpoint))
 
-	connector.HandleFunc("/", rootEndpoint)
-	connector.Handle("/config", WrapEndpointWithCtx(connector, configEndpoint))
-	connector.Handle("/config/reload", WrapEndpointWithCtx(connector, configReloadEndpoint))
-	connector.Handle("/servers", WrapEndpointWithCtx(connector, serversEndpoint))
-	connector.Handle("/server/{id}", WrapEndpointWithCtx(connector, serverEndpoint))
+	http.HandleFunc("/", rootEndpoint)
+	http.Handle("/config", WrapEndpointWithCtx(connector, configEndpoint))
+	http.Handle("/config/reload", WrapEndpointWithCtx(connector, configReloadEndpoint))
+	http.Handle("/servers", WrapEndpointWithCtx(connector, serversEndpoint))
+	http.Handle("/server/{id}", WrapEndpointWithCtx(connector, serverEndpoint))
 	connector.Upgrader.CheckOrigin = func(r *http.Request) bool { return true }
-	connector.Handle("/server/{id}/console", WrapEndpointWithCtx(connector, consoleEndpoint))
+	http.Handle("/server/{id}/console", WrapEndpointWithCtx(connector, consoleEndpoint))
 
-	connector.Handle("/server/{id}/files", WrapEndpointWithCtx(connector, filesEndpoint))
-	connector.Handle("/server/{id}/file", WrapEndpointWithCtx(connector, fileEndpoint))
-	connector.Handle("/server/{id}/folder", WrapEndpointWithCtx(connector, folderEndpoint))
-	connector.Handle("/server/{id}/compress", WrapEndpointWithCtx(connector, compressionEndpoint))
-	connector.Handle("/server/{id}/compress/v2", WrapEndpointWithCtx(connector, compressionEndpoint))
-	connector.Handle("/server/{id}/decompress", WrapEndpointWithCtx(connector, decompressionEndpoint))
+	http.Handle("/server/{id}/files", WrapEndpointWithCtx(connector, filesEndpoint))
+	http.Handle("/server/{id}/file", WrapEndpointWithCtx(connector, fileEndpoint))
+	http.Handle("/server/{id}/folder", WrapEndpointWithCtx(connector, folderEndpoint))
+	http.Handle("/server/{id}/compress", WrapEndpointWithCtx(connector, compressionEndpoint))
+	http.Handle("/server/{id}/compress/v2", WrapEndpointWithCtx(connector, compressionEndpoint))
+	http.Handle("/server/{id}/decompress", WrapEndpointWithCtx(connector, decompressionEndpoint))
 	return connector
 }
 
