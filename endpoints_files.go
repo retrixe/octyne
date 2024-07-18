@@ -268,7 +268,7 @@ func fileEndpointPatch(connector *Connector, w http.ResponseWriter, r *http.Requ
 		} else if err == nil {
 			httpError(w, "This file already exists!", http.StatusMethodNotAllowed)
 			return
-		} else if err != nil && !os.IsNotExist(err) {
+		} else if !os.IsNotExist(err) {
 			log.Println("An error occurred in mv/cp API when checking for "+newpath, "("+process.Name+")", err)
 			httpError(w, "Internal Server Error!", http.StatusInternalServerError)
 			return

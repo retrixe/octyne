@@ -3,10 +3,8 @@ package main
 import (
 	"bytes"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -224,9 +222,9 @@ func accountsEndpointPost(connector *Connector, w http.ResponseWriter, r *http.R
 		httpError(w, "User already exists!", http.StatusConflict)
 		return false
 	}
-	sha256sum := fmt.Sprintf("%x", sha256.Sum256([]byte(body.Password)))
+	hash := auth.HashPassword(body.Password)
 	connector.Info("accounts.create", "ip", GetIP(r), "user", user, "newUser", body.Username)
-	users[body.Username] = sha256sum
+	users[body.Username] = hash
 	return true
 }
 
@@ -258,19 +256,19 @@ func accountsEndpointPatch(connector *Connector, w http.ResponseWriter, r *http.
 		httpError(w, "User already exists!", http.StatusConflict)
 		return false
 	}
-	sha256sum := users[username]
+	hash := users[username]
 	if body.Password != "" {
-		sha256sum = fmt.Sprintf("%x", sha256.Sum256([]byte(body.Password)))
+		hash = auth.HashPassword(body.Password)
 	}
 	if toUpdateUsername {
 		connector.Info("accounts.update", "ip", GetIP(r), "user", user,
 			"updatedUser", body.Username, "oldUsername", username, "changedPassword", body.Password != "")
 		delete(users, username)
-		users[body.Username] = sha256sum
+		users[body.Username] = hash
 	} else {
 		connector.Info("accounts.update", "ip", GetIP(r), "user", user,
 			"updatedUser", username, "changedPassword", true)
-		users[username] = sha256sum
+		users[username] = hash
 	}
 	return true
 }

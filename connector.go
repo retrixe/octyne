@@ -206,11 +206,11 @@ func (connector *Connector) AddProcess(proc *Process) {
 	})()
 }
 
-func httpError(w http.ResponseWriter, error string, code int) {
+func httpError(w http.ResponseWriter, errMsg string, code int) {
 	w.Header().Set("content-type", "application/json")
 	errorJson, err := json.Marshal(struct {
 		Error string `json:"error"`
-	}{Error: error})
+	}{Error: errMsg})
 	if err == nil {
 		http.Error(w, string(errorJson), code)
 	} else {

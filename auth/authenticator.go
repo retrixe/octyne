@@ -2,9 +2,7 @@ package auth
 
 import (
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/base64"
-	"fmt"
 	"net/http"
 	"sync"
 
@@ -92,10 +90,10 @@ func isValidToken(token string) bool {
 
 func checkValidLoginAndGenerateToken(auth Authenticator, username string, password string) string {
 	// Hash the password.
-	sha256sum := fmt.Sprintf("%x", sha256.Sum256([]byte(password)))
+	hash := HashPassword(password)
 	// Check whether this user exists.
-	hashedPassword, exists := auth.GetUsers().Load(username)
-	if !exists || hashedPassword != sha256sum {
+	actualHash, exists := auth.GetUsers().Load(username)
+	if !exists || actualHash != hash {
 		return ""
 	}
 	// Generate a token and return it.

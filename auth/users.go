@@ -1,7 +1,12 @@
 package auth
 
 import (
+	"bytes"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"time"
@@ -9,7 +14,26 @@ import (
 	"github.com/puzpuzpuz/xsync/v3"
 )
 
+func HashPassword(password string) string {
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(password)))
+}
+
 func CreateUserStore(usersJsonPath string) *xsync.MapOf[string, string] {
+	// Create default users.json file
+	_, err := os.Stat(usersJsonPath)
+	if os.IsNotExist(err) {
+		passwordBytes := make([]byte, 12)
+		rand.Read(passwordBytes) // Tolerate errors here, an error here is incredibly unlikely: skipcq GSC-G104
+		password := base64.RawStdEncoding.EncodeToString(passwordBytes)
+		hash := HashPassword(password)
+		err = os.WriteFile(usersJsonPath, []byte("{\n  \"admin\": \""+hash+"\"\n}"), 0644)
+		if err != nil {
+			log.Println("An error occurred while creating " + usersJsonPath + "! " + err.Error())
+		}
+		log.Println("The file " + usersJsonPath +
+			" has been generated with the default user 'admin' and password '" + password + "'.")
+	}
+
 	var users = xsync.NewMapOf[string, string]()
 	initialFile, updates, err := readAndWatchFile(usersJsonPath)
 	if err != nil {
@@ -67,7 +91,7 @@ func readAndWatchFile(filePath string) ([]byte, chan []byte, error) {
 				log.Println("An error occurred while reading " + filePath + "! " + err.Error())
 				continue
 			}
-			if string(newFile) != string(file) {
+			if !bytes.Equal(newFile, file) {
 				file = newFile
 				channel <- newFile
 			}
