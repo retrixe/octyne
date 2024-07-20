@@ -89,11 +89,9 @@ func isValidToken(token string) bool {
 }
 
 func checkValidLoginAndGenerateToken(auth Authenticator, username string, password string) string {
-	// Hash the password.
-	hash := HashPassword(password)
-	// Check whether this user exists.
-	actualHash, exists := auth.GetUsers().Load(username)
-	if !exists || actualHash != hash {
+	// Check whether this user exists and if the password matches the saved hash.
+	hash, exists := auth.GetUsers().Load(username)
+	if !exists || !VerifyPasswordMatchesHash(password, hash) {
 		return ""
 	}
 	// Generate a token and return it.

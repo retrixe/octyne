@@ -3,20 +3,14 @@ package auth
 import (
 	"bytes"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"log"
 	"os"
 	"time"
 
 	"github.com/puzpuzpuz/xsync/v3"
 )
-
-func HashPassword(password string) string {
-	return fmt.Sprintf("%x", sha256.Sum256([]byte(password)))
-}
 
 func CreateUserStore(usersJsonPath string) *xsync.MapOf[string, string] {
 	// Create default users.json file
