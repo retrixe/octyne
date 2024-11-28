@@ -13,7 +13,7 @@ type MemoryAuthenticator struct {
 }
 
 // NewMemoryAuthenticator initializes an authenticator using memory for token storage.
-func NewMemoryAuthenticator(usersJsonPath string) Authenticator {
+func NewMemoryAuthenticator(usersJsonPath string) *MemoryAuthenticator {
 	users := CreateUserStore(usersJsonPath)
 	return &MemoryAuthenticator{Tokens: xsync.NewMapOf[string, string](), Users: users}
 }
@@ -23,31 +23,39 @@ func (a *MemoryAuthenticator) GetUsers() *xsync.MapOf[string, string] {
 	return a.Users
 }
 
-// Validate is called on an HTTP API request and checks whether or not the user is authenticated.
-func (a *MemoryAuthenticator) Validate(w http.ResponseWriter, r *http.Request) string {
+// Validate is called on an HTTP API request and returns the username if request is authenticated.
+func (a *MemoryAuthenticator) Validate(w http.ResponseWriter, r *http.Request) (string, error) {
 	if r.RemoteAddr == "@" {
-		return "@local"
+		return "@local", nil
 	}
 
 	token := GetTokenFromRequest(r)
 	if !isValidToken(token) {
-		w.Header().Set("content-type", "application/json")
-		http.Error(w, "{\"error\": \"You are not authenticated to access this resource!\"}",
-			http.StatusUnauthorized)
-		return ""
+		return "", nil
 	}
-	// If valid, return true.
 	username, ok := a.Tokens.Load(token)
 	if ok {
 		if _, exists := a.Users.Load(username); exists {
-			return username
+			return username, nil
 		}
 		a.Logout(token)
 	}
-	w.Header().Set("content-type", "application/json")
-	http.Error(w, "{\"error\": \"You are not authenticated to access this resource!\"}",
-		http.StatusUnauthorized)
-	return ""
+	return "", nil
+}
+
+// ValidateAndReject is called on an HTTP API request and returns the username if request
+// is authenticated, else the request is rejected.
+func (a *MemoryAuthenticator) ValidateAndReject(w http.ResponseWriter, r *http.Request) string {
+	username, err := a.Validate(w, r)
+	if err != nil {
+		w.Header().Set("content-type", "application/json")
+		http.Error(w, "{\"error\": \"Internal Server Error!\"}", http.StatusInternalServerError)
+	} else if username == "" {
+		w.Header().Set("content-type", "application/json")
+		http.Error(w, "{\"error\": \"You are not authenticated to access this resource!\"}",
+			http.StatusUnauthorized)
+	}
+	return username
 }
 
 // Login allows logging in a user and returning the token.

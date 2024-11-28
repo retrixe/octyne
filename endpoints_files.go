@@ -43,7 +43,7 @@ type serverFilesResponse struct {
 
 func filesEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request) {
 	// Check with authenticator.
-	if connector.Validate(w, r) == "" {
+	if connector.ValidateAndReject(w, r) == "" {
 		return
 	}
 	// Get the process being accessed.
@@ -116,7 +116,7 @@ func fileEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request) 
 	user := ""
 	if ticketExists && ticket.IPAddr == GetIP(r) && r.Method == "GET" {
 		user = ticket.User
-	} else if user = connector.Validate(w, r); user == "" {
+	} else if user = connector.ValidateAndReject(w, r); user == "" {
 		return
 	}
 	// Get the process being accessed.
@@ -334,7 +334,7 @@ func fileEndpointDelete(connector *Connector, w http.ResponseWriter, r *http.Req
 // POST /server/{id}/folder?path=path
 func folderEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request) {
 	// Check with authenticator.
-	user := connector.Validate(w, r)
+	user := connector.ValidateAndReject(w, r)
 	if user == "" {
 		return
 	}
@@ -383,7 +383,7 @@ var compressionProgressMap = xsync.NewMapOf[string, string]()
 
 func compressionEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request) {
 	// Check with authenticator.
-	user := connector.Validate(w, r)
+	user := connector.ValidateAndReject(w, r)
 	if user == "" {
 		return
 	}
@@ -561,7 +561,7 @@ func compressionEndpoint(connector *Connector, w http.ResponseWriter, r *http.Re
 // POST /server/{id}/decompress?path=path
 func decompressionEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request) {
 	// Check with authenticator.
-	user := connector.Validate(w, r)
+	user := connector.ValidateAndReject(w, r)
 	if user == "" {
 		return
 	}

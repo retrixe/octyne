@@ -13,8 +13,11 @@ import (
 type Authenticator interface {
 	// GetUsers returns a Map with all the users and their corresponding passwords.
 	GetUsers() *xsync.MapOf[string, string]
-	// Validate is called on an HTTP API request and returns the user's name if request is authenticated.
-	Validate(w http.ResponseWriter, r *http.Request) string
+	// Validate is called on an HTTP API request and returns the username if request is authenticated.
+	Validate(w http.ResponseWriter, r *http.Request) (string, error)
+	// ValidateAndReject is called on an HTTP API request and returns the username if request
+	// is authenticated, else the request is rejected.
+	ValidateAndReject(w http.ResponseWriter, r *http.Request) string
 	// Login allows logging in a user and returning the token.
 	Login(username string, password string) (string, error)
 	// Logout allows logging out of a user and deleting the token from the server.
@@ -37,15 +40,19 @@ func (a *ReplaceableAuthenticator) GetUsers() *xsync.MapOf[string, string] {
 	return a.Engine.GetUsers()
 }
 
-// Validate is called on an HTTP API request and checks whether or not the user is authenticated.
-func (a *ReplaceableAuthenticator) Validate(w http.ResponseWriter, r *http.Request) string {
-	if r.RemoteAddr == "@" {
-		return "@local"
-	}
-
+// Validate is called on an HTTP API request and returns the username if request is authenticated.
+func (a *ReplaceableAuthenticator) Validate(w http.ResponseWriter, r *http.Request) (string, error) {
 	a.EngineMutex.RLock()
 	defer a.EngineMutex.RUnlock()
 	return a.Engine.Validate(w, r)
+}
+
+// ValidateAndReject is called on an HTTP API request and returns the username if request
+// is authenticated, else the request is rejected.
+func (a *ReplaceableAuthenticator) ValidateAndReject(w http.ResponseWriter, r *http.Request) string {
+	a.EngineMutex.RLock()
+	defer a.EngineMutex.RUnlock()
+	return a.Engine.ValidateAndReject(w, r)
 }
 
 // Login allows logging in a user and returning the token.
@@ -68,8 +75,6 @@ func (a *ReplaceableAuthenticator) Close() error {
 	defer a.EngineMutex.Unlock()
 	return a.Engine.Close()
 }
-
-// Miscellaneous utilities:
 
 // GetTokenFromRequest gets the token from the request header or cookie.
 func GetTokenFromRequest(r *http.Request) string {

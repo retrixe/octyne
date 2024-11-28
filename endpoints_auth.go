@@ -67,7 +67,7 @@ func logoutEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request
 		return
 	}
 	// Check with authenticator.
-	user := connector.Validate(w, r)
+	user := connector.ValidateAndReject(w, r)
 	if user == "" {
 		return
 	}
@@ -103,7 +103,7 @@ func ottEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Check with authenticator.
-	user := connector.Validate(w, r)
+	user := connector.ValidateAndReject(w, r)
 	if user == "" {
 		return
 	}
@@ -137,7 +137,7 @@ type accountsRequestBody struct {
 }
 
 func accountsEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request) {
-	user := connector.Validate(w, r)
+	user := connector.ValidateAndReject(w, r)
 	if user == "" {
 		return
 	} else if r.Method != "GET" && r.Method != "POST" && r.Method != "PATCH" && r.Method != "DELETE" {

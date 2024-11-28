@@ -22,7 +22,7 @@ func rootEndpoint(w http.ResponseWriter, _ *http.Request) {
 // GET /config
 // PATCH /config
 func configEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request) {
-	user := connector.Validate(w, r)
+	user := connector.ValidateAndReject(w, r)
 	if user == "" {
 		return
 	} else if r.Method != "GET" && r.Method != "PATCH" {
@@ -79,7 +79,7 @@ func configEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request
 // GET /config/reload
 func configReloadEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request) {
 	// Check with authenticator.
-	user := connector.Validate(w, r)
+	user := connector.ValidateAndReject(w, r)
 	if user == "" {
 		return
 	}
@@ -118,7 +118,7 @@ type serversResponse struct {
 
 func serversEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request) {
 	// Check with authenticator.
-	if connector.Validate(w, r) == "" {
+	if connector.ValidateAndReject(w, r) == "" {
 		return
 	}
 	// Get a map of processes and their online status.
@@ -153,7 +153,7 @@ var totalMemory = int64(system.GetTotalSystemMemory())
 
 func serverEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request) {
 	// Check with authenticator.
-	user := connector.Validate(w, r)
+	user := connector.ValidateAndReject(w, r)
 	if user == "" {
 		return
 	}
@@ -259,7 +259,7 @@ func consoleEndpoint(connector *Connector, w http.ResponseWriter, r *http.Reques
 	user := ""
 	if ticketExists && ticket.IPAddr == GetIP(r) {
 		user = ticket.User
-	} else if user = connector.Validate(w, r); user == "" {
+	} else if user = connector.ValidateAndReject(w, r); user == "" {
 		return
 	}
 	// Retrieve the token.

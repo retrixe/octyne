@@ -40,18 +40,15 @@ func (a *RedisAuthenticator) GetUsers() *xsync.MapOf[string, string] {
 	return a.Users
 }
 
-// Validate is called on an HTTP API request and checks whether or not the user is authenticated.
-func (a *RedisAuthenticator) Validate(w http.ResponseWriter, r *http.Request) string {
+// Validate is called on an HTTP API request and returns the username if request is authenticated.
+func (a *RedisAuthenticator) Validate(w http.ResponseWriter, r *http.Request) (string, error) {
 	if r.RemoteAddr == "@" {
-		return "@local"
+		return "@local", nil
 	}
 
 	token := GetTokenFromRequest(r)
 	if !isValidToken(token) {
-		w.Header().Set("content-type", "application/json")
-		http.Error(w, "{\"error\": \"You are not authenticated to access this resource!\"}",
-			http.StatusUnauthorized)
-		return ""
+		return "", nil
 	}
 	// Make request to Redis database.
 	conn := a.Redis.Get()
@@ -61,16 +58,26 @@ func (a *RedisAuthenticator) Validate(w http.ResponseWriter, r *http.Request) st
 		if !exists {
 			a.Logout(token)
 		}
+	} else if err != nil {
+		log.Println("An error occurred while making a request to Redis!", err) // skipcq: GO-S0904
+		return "", err
+	}
+	return res, nil
+}
+
+// ValidateAndReject is called on an HTTP API request and returns the username if request
+// is authenticated, else the request is rejected.
+func (a *RedisAuthenticator) ValidateAndReject(w http.ResponseWriter, r *http.Request) string {
+	username, err := a.Validate(w, r)
+	if err != nil {
+		w.Header().Set("content-type", "application/json")
+		http.Error(w, "{\"error\": \"Internal Server Error!\"}", http.StatusInternalServerError)
+	} else if username == "" {
 		w.Header().Set("content-type", "application/json")
 		http.Error(w, "{\"error\": \"You are not authenticated to access this resource!\"}",
 			http.StatusUnauthorized)
-	} else if err != nil {
-		log.Println("An error occurred while making a request to Redis!", err) // skipcq: GO-S0904
-		w.Header().Set("content-type", "application/json")
-		http.Error(w, "{\"error\": \"Internal Server Error!\"}", http.StatusInternalServerError)
-		return ""
 	}
-	return res
+	return username
 }
 
 // Login allows logging in a user and returning the token.
