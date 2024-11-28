@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -253,14 +254,44 @@ func serverEndpointPost(connector *Connector, w http.ResponseWriter, r *http.Req
 }
 
 // WS /server/{id}/console
+type consoleError struct {
+	Type    string `json:"type"`
+	Message string `json:"message"`
+}
+
+type consoleData struct {
+	Type string `json:"type"`
+	Data string `json:"data"`
+}
+
+type consolePing struct {
+	Type string `json:"type"`
+	ID   string `json:"id"`
+}
+
+type consoleSettings struct {
+	Type string `json:"type"`
+}
+
 func consoleEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request) {
+	// Get console protocol version.
+	v2 := slices.Contains(websocket.Subprotocols(r), "console-v2")
 	// Check with authenticator.
 	ticket, ticketExists := connector.Tickets.LoadAndDelete(r.URL.Query().Get("ticket"))
 	user := ""
+	var userErr error = nil
 	if ticketExists && ticket.IPAddr == GetIP(r) {
 		user = ticket.User
-	} else if user = connector.ValidateAndReject(w, r); user == "" {
-		return
+	} else {
+		user, userErr = connector.Authenticator.Validate(w, r)
+	}
+	if !v2 && userErr != nil {
+		w.Header().Set("content-type", "application/json")
+		http.Error(w, "{\"error\": \"Internal Server Error!\"}", http.StatusInternalServerError)
+	} else if !v2 && user == "" {
+		w.Header().Set("content-type", "application/json")
+		http.Error(w, "{\"error\": \"You are not authenticated to access this resource!\"}",
+			http.StatusUnauthorized)
 	}
 	// Retrieve the token.
 	token := auth.GetTokenFromRequest(r)
@@ -271,14 +302,32 @@ func consoleEndpoint(connector *Connector, w http.ResponseWriter, r *http.Reques
 	id := r.PathValue("id")
 	process, exists := connector.Processes.Load(id)
 	// In case the server doesn't exist.
-	if !exists {
+	if !exists && !v2 {
 		httpError(w, "This server does not exist!", http.StatusNotFound)
 		return
 	}
 	// Upgrade WebSocket connection.
 	c, err := connector.Upgrade(w, r, nil)
-	v2 := c.Subprotocol() == "console-v2"
 	if err == nil {
+		if v2 {
+			errStr, errNo := "", 0
+			if !exists {
+				errStr = "This server does not exist!"
+				errNo = 4000 + http.StatusNotFound
+			} else if userErr != nil {
+				errStr = "Internal Server Error!"
+				errNo = 4000 + http.StatusInternalServerError
+			} else if user == "" {
+				errStr = "You are not authenticated to access this resource!"
+				errNo = 4000 + http.StatusUnauthorized
+			}
+			if errStr != "" {
+				c.WriteJSON(consoleError{"error", errStr})
+				c.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(errNo, errStr))
+				c.Close()
+				return
+			}
+		}
 		connector.Info("server.console.access", "ip", GetIP(r), "user", user, "server", id)
 		defer c.Close()
 		// Setup WebSocket limits.
@@ -287,9 +336,7 @@ func consoleEndpoint(connector *Connector, w http.ResponseWriter, r *http.Reques
 		// If v2, send settings and set read deadline.
 		if v2 {
 			c.SetReadDeadline(time.Now().Add(timeout))
-			c.WriteJSON(struct { // skipcq GSC-G104
-				Type string `json:"type"`
-			}{"settings"})
+			c.WriteJSON(consoleSettings{"settings"})
 		}
 		// Use a channel to synchronise all writes to the WebSocket.
 		writeChannel := make(chan interface{}, 8)
@@ -309,10 +356,7 @@ func consoleEndpoint(connector *Connector, w http.ResponseWriter, r *http.Reques
 				c.SetWriteDeadline(time.Now().Add(timeout)) // Set write deadline esp for v1 connections.
 				str, ok := data.(string)
 				if ok && v2 {
-					json, err := json.Marshal(struct {
-						Type string `json:"type"`
-						Data string `json:"data"`
-					}{"output", str})
+					json, err := json.Marshal(consoleData{"output", str})
 					if err != nil {
 						log.Println("Error in "+process.Name+" console!", err)
 					} else {
@@ -358,23 +402,14 @@ func consoleEndpoint(connector *Connector, w http.ResponseWriter, r *http.Reques
 							"input", data["data"])
 						process.SendCommand(data["data"])
 					} else if data["type"] == "ping" {
-						json, _ := json.Marshal(struct { // skipcq GSC-G104
-							Type string `json:"type"`
-							ID   string `json:"id"`
-						}{"pong", data["id"]})
+						json, _ := json.Marshal(consolePing{"pong", data["id"]})
 						writeChannel <- json
 					} else {
-						json, _ := json.Marshal(struct { // skipcq GSC-G104
-							Type    string `json:"type"`
-							Message string `json:"message"`
-						}{"error", "Invalid message type: " + data["type"]})
+						json, _ := json.Marshal(consoleError{"error", "Invalid message type: " + data["type"]})
 						writeChannel <- json
 					}
 				} else {
-					json, _ := json.Marshal(struct { // skipcq GSC-G104
-						Type    string `json:"type"`
-						Message string `json:"message"`
-					}{"error", "Invalid message format"})
+					json, _ := json.Marshal(consoleError{"error", "Invalid message format"})
 					writeChannel <- json
 				}
 			} else {
