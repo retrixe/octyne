@@ -124,7 +124,7 @@ func serversEndpoint(connector *Connector, w http.ResponseWriter, r *http.Reques
 	}
 	// Get a map of processes and their online status.
 	processes := make(map[string]interface{})
-	connector.Processes.Range(func(k string, v *ExposedProcess) bool {
+	connector.Processes.Range(func(_ string, v *ExposedProcess) bool {
 		if r.URL.Query().Get("extrainfo") == "true" {
 			processes[v.Name] = map[string]interface{}{
 				"status":   v.Online.Load(),
@@ -283,7 +283,7 @@ func consoleEndpoint(connector *Connector, w http.ResponseWriter, r *http.Reques
 	if ticketExists && ticket.IPAddr == GetIP(r) {
 		user = ticket.User
 	} else {
-		user, userErr = connector.Authenticator.Validate(w, r)
+		user, userErr = connector.Authenticator.Validate(r)
 	}
 	if !v2 && userErr != nil {
 		w.Header().Set("content-type", "application/json")

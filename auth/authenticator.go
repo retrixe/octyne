@@ -14,7 +14,7 @@ type Authenticator interface {
 	// GetUsers returns a Map with all the users and their corresponding passwords.
 	GetUsers() *xsync.MapOf[string, string]
 	// Validate is called on an HTTP API request and returns the username if request is authenticated.
-	Validate(w http.ResponseWriter, r *http.Request) (string, error)
+	Validate(r *http.Request) (string, error)
 	// ValidateAndReject is called on an HTTP API request and returns the username if request
 	// is authenticated, else the request is rejected.
 	ValidateAndReject(w http.ResponseWriter, r *http.Request) string
@@ -41,10 +41,10 @@ func (a *ReplaceableAuthenticator) GetUsers() *xsync.MapOf[string, string] {
 }
 
 // Validate is called on an HTTP API request and returns the username if request is authenticated.
-func (a *ReplaceableAuthenticator) Validate(w http.ResponseWriter, r *http.Request) (string, error) {
+func (a *ReplaceableAuthenticator) Validate(r *http.Request) (string, error) {
 	a.EngineMutex.RLock()
 	defer a.EngineMutex.RUnlock()
-	return a.Engine.Validate(w, r)
+	return a.Engine.Validate(r)
 }
 
 // ValidateAndReject is called on an HTTP API request and returns the username if request

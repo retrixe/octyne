@@ -24,7 +24,7 @@ func (a *MemoryAuthenticator) GetUsers() *xsync.MapOf[string, string] {
 }
 
 // Validate is called on an HTTP API request and returns the username if request is authenticated.
-func (a *MemoryAuthenticator) Validate(w http.ResponseWriter, r *http.Request) (string, error) {
+func (a *MemoryAuthenticator) Validate(r *http.Request) (string, error) {
 	if r.RemoteAddr == "@" {
 		return "@local", nil
 	}
@@ -46,7 +46,7 @@ func (a *MemoryAuthenticator) Validate(w http.ResponseWriter, r *http.Request) (
 // ValidateAndReject is called on an HTTP API request and returns the username if request
 // is authenticated, else the request is rejected.
 func (a *MemoryAuthenticator) ValidateAndReject(w http.ResponseWriter, r *http.Request) string {
-	username, err := a.Validate(w, r)
+	username, err := a.Validate(r)
 	if err != nil {
 		w.Header().Set("content-type", "application/json")
 		http.Error(w, "{\"error\": \"Internal Server Error!\"}", http.StatusInternalServerError)
