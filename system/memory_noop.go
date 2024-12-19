@@ -1,4 +1,4 @@
-// +build !linux,!windows,!darwin,!freebsd,!openbsd,!dragonfly,!netbsd
+//go:build !(linux || windows || darwin || freebsd || openbsd || dragonfly || netbsd)
 
 package system
 

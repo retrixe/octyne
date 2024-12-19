@@ -32,15 +32,6 @@ func clean(pathToClean string) string {
 	return filepath.FromSlash(path.Clean(pathToClean))
 }
 
-func isFileLocked(err error) bool {
-	linkErr, ok := err.(*os.LinkError)
-	if !ok {
-		return false
-	}
-	return linkErr.Err != nil && linkErr.Err.Error() ==
-		"The process cannot access the file because it is being used by another process."
-}
-
 // GET /server/{id}/files?path=path
 type serverFilesResponse struct {
 	Name         string `json:"name"`
@@ -297,7 +288,7 @@ func fileEndpointPatch(connector *Connector, w http.ResponseWriter, r *http.Requ
 		// Move file if operation is mv.
 		if req.Operation == "mv" {
 			err := os.Rename(oldpath, newpath)
-			if err != nil && isFileLocked(err) {
+			if err != nil && system.IsFileLocked(err) {
 				httpError(w, err.(*os.LinkError).Err.Error(), http.StatusConflict)
 				return
 			} else if err != nil {
@@ -337,7 +328,7 @@ func fileEndpointDelete(connector *Connector, w http.ResponseWriter, r *http.Req
 		return
 	}
 	err = os.RemoveAll(filePath)
-	if err != nil && isFileLocked(err) {
+	if err != nil && system.IsFileLocked(err) {
 		httpError(w, err.(*os.PathError).Err.Error(), http.StatusConflict)
 		return
 	} else if err != nil {
