@@ -11,16 +11,15 @@ It incorporates the ability to manage files and access the terminal output and i
 ## Quick Start
 
 - [Download the latest version of Octyne from GitHub Releases for your OS and CPU.](https://github.com/retrixe/octyne/releases/latest) Alternatively, you can get the latest bleeding edge version of Octyne from [GitHub Actions](https://github.com/retrixe/octyne/actions?query=branch%3Amain), or by compiling it yourself.
-- Place octyne in a folder, and run `chmod +x <octyne file name>` to mark it as executable if using macOS/Linux/*nix-like.
-- Follow the steps [here](https://github.com/retrixe/octyne#configuration) to configure Octyne correctly.
-- Run `./<octyne file name>` (`.\<octyne file name>.exe` on Windows) in a terminal in the folder to start Octyne. Alternatively, on Windows/Linux desktops, you can double click the file (on Linux, select `Run in Terminal`, else it will run in the background).
-- You may want to get [Ecthelion](https://github.com/retrixe/ecthelion) as aforementioned in the description, as a web app to manage Octyne, and [octynectl](https://github.com/retrixe/octynectl) as a CLI tool to manage Octyne locally on your machine. [Additionally, make sure to follow the security practices here to prevent attacks against your setup!](https://github.com/retrixe/octyne#security-practices-and-reverse-proxying)
+- Place octyne in a folder (on Linux/macOS/\*nix, mark as executable with `chmod +x <octyne file name>`).
+- Create a `config.json` next to Octyne (see [here](https://github.com/retrixe/octyne#configuration) for details).
+- Run `./<octyne file name>` in a terminal in the folder to start Octyne. An `admin` user will be generated for you.
+- You may want to get [Ecthelion](https://github.com/retrixe/ecthelion) to manage Octyne over the internet, and [octynectl](https://github.com/retrixe/octynectl) as a CLI tool to manage Octyne locally on your machine. [Additionally, make sure to follow the security practices here to prevent attacks against your setup!](https://github.com/retrixe/octyne#security-practices-and-reverse-proxying)
+- You might want to manage Octyne using systemd on Linux systems, which can start/stop Octyne, start it on boot, store its logs and restart it on crash. [This article should help you out.](https://medium.com/@benmorel/creating-a-linux-service-with-systemd-611b5c8b91d6)
 
 ### Usage
 
 To get the current Octyne version, you can run `./octyne --version` or `./octyne -v`. This does not account for development builds.
-
-You might want to manage octyne using systemd on Linux systems, which can start and stop Octyne, start it on boot, store its logs and restart it on crash. [This article should help you out.](https://medium.com/@benmorel/creating-a-linux-service-with-systemd-611b5c8b91d6)
 
 ## Configuration
 
