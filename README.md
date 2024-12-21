@@ -96,7 +96,7 @@ By default, Octyne will log all actions performed by users. You can enable/disab
 - Server management (`server`):
   - Top-level actions: `start`, `stop`, `kill`
   - Console (`server.console`): `access`, `input`
-  - Files (`server.files`): `upload`, `download`, `createFolder`, `delete`, `move`, `copy`, `compress`, `decompress`
+  - Files (`server.files`): `upload`, `download`, `createFolder`, `delete`, `move`, `copy`, `bulk`, `compress`, `decompress`
 
 ## Security Practices and Reverse Proxying
 
