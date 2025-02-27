@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/pelletier/go-toml/v2"
 	"github.com/retrixe/octyne/auth"
 	"github.com/retrixe/octyne/system"
 	"github.com/tailscale/hujson"
@@ -32,14 +33,18 @@ func configEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request
 		return
 	}
 	if r.Method == "GET" {
-		contents, err := os.ReadFile(ConfigJsonPath)
+		contents, err := os.ReadFile(ConfigFilePath)
 		if err != nil {
-			log.Println("Error reading "+ConfigJsonPath+" when user accessed /config!", err)
+			log.Println("Error reading "+ConfigFilePath+" when user accessed /config!", err)
 			httpError(w, "Internal Server Error!", http.StatusInternalServerError)
 			return
 		}
 		connector.Info("config.view", "ip", GetIP(r), "user", user)
-		w.Header().Set("content-type", "application/json")
+		if isJSON(contents) {
+			w.Header().Set("content-type", "application/json")
+		} else {
+			w.Header().Set("content-type", "application/toml")
+		}
 		_, _ = w.Write(contents)
 	} else if r.Method == "PATCH" {
 		var buffer bytes.Buffer
@@ -50,25 +55,34 @@ func configEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request
 		}
 		var origJson = buffer.String()
 		var config Config
-		contents, err := hujson.Standardize(buffer.Bytes())
-		if err != nil {
-			httpError(w, "Invalid JSON body!", http.StatusBadRequest)
-			return
+		contentType := r.Header.Get("content-type")
+		if contentType == "application/json" || (contentType == "" && isJSON(buffer.Bytes())) {
+			contents, err := hujson.Standardize(buffer.Bytes())
+			if err != nil {
+				httpError(w, "Invalid JSON body!", http.StatusBadRequest)
+				return
+			}
+			err = json.Unmarshal(contents, &config)
+			if err != nil {
+				httpError(w, "Invalid JSON body!", http.StatusBadRequest)
+				return
+			}
+		} else {
+			err = toml.Unmarshal(buffer.Bytes(), &config)
+			if err != nil {
+				httpError(w, "Invalid TOML body!", http.StatusBadRequest)
+				return
+			}
 		}
-		err = json.Unmarshal(contents, &config)
+		err = os.WriteFile(ConfigFilePath+"~", []byte(strings.TrimSpace(origJson)+"\n"), 0666)
 		if err != nil {
-			httpError(w, "Invalid JSON body!", http.StatusBadRequest)
-			return
-		}
-		err = os.WriteFile(ConfigJsonPath+"~", []byte(strings.TrimSpace(origJson)+"\n"), 0666)
-		if err != nil {
-			log.Println("Error writing to " + ConfigJsonPath + " when user modified config!")
+			log.Println("Error writing to " + ConfigFilePath + " when user modified config!")
 			httpError(w, "Internal Server Error!", http.StatusInternalServerError)
 			return
 		}
-		err = os.Rename(ConfigJsonPath+"~", ConfigJsonPath)
+		err = os.Rename(ConfigFilePath+"~", ConfigFilePath)
 		if err != nil {
-			log.Println("Error writing to " + ConfigJsonPath + " when user modified config!")
+			log.Println("Error writing to " + ConfigFilePath + " when user modified config!")
 			httpError(w, "Internal Server Error!", http.StatusInternalServerError)
 			return
 		}

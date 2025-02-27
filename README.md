@@ -4,7 +4,7 @@ A process manager with an HTTP API for remote console and file access.
 
 Octyne allows running multiple apps on a remote server and provides an HTTP API to manage them. This allows for hosting web servers, game servers, bots and so on on remote servers without having to mess with SSH, using `screen` and `systemd` whenever you want to make any change, in a highly manageable and secure way.
 
-It incorporates the ability to manage files and access the terminal output and input over HTTP remotely. For further security, it is recommended to use HTTPS (see [config.json](#configjson)) to ensure end-to-end secure transmission.
+It incorporates the ability to manage files and access the terminal output and input over HTTP remotely. For further security, it is recommended to use HTTPS (see [config.toml](#configtoml)) to ensure end-to-end secure transmission.
 
 [retrixe/ecthelion](https://github.com/retrixe/ecthelion) complements octyne by providing a web interface to control apps on octyne remotely.
 
@@ -12,7 +12,7 @@ It incorporates the ability to manage files and access the terminal output and i
 
 - [Download the latest version of Octyne from GitHub Releases for your OS and CPU.](https://github.com/retrixe/octyne/releases/latest) Alternatively, you can get the latest bleeding edge version of Octyne from [GitHub Actions](https://github.com/retrixe/octyne/actions?query=branch%3Amain), or by compiling it yourself.
 - Place octyne in a folder (on Linux/macOS/\*nix, mark as executable with `chmod +x <octyne file name>`).
-- Create a `config.json` next to Octyne (see [here](https://github.com/retrixe/octyne#configuration) for details).
+- Create a `config.toml` next to Octyne (see [here](https://github.com/retrixe/octyne#configuration) for details).
 - Run `./<octyne file name>` in a terminal in the folder to start Octyne. An `admin` user will be generated for you.
 - You may want to get [Ecthelion](https://github.com/retrixe/ecthelion) to manage Octyne over the internet, and [octynectl](https://github.com/retrixe/octynectl) as a CLI tool to manage Octyne locally on your machine. [Additionally, make sure to follow the security practices here to prevent attacks against your setup!](https://github.com/retrixe/octyne#security-practices-and-reverse-proxying)
 - You might want to manage Octyne using systemd on Linux systems, which can start/stop Octyne, start it on boot, store its logs and restart it on crash. [This article should help you out.](https://medium.com/@benmorel/creating-a-linux-service-with-systemd-611b5c8b91d6)
@@ -27,9 +27,60 @@ Octyne depends on two files in the current working directory to get configuratio
 
 The path to these files can be customised using the `--config=/path/to/config.json` and `--users=/path/to/users.json` CLI flags (if relative, resolved relative to the working directory).
 
-### config.json
+### config.toml
 
 Used to configure the apps Octyne should start, Redis-based authentication for allowing more than a single node, Unix socket API, and HTTPS support. A reverse proxy can also be used for HTTPS if it supports WSS.
+
+```toml
+port = 42069 # optional, default is 42069
+
+[unixSocket]
+# enables Unix socket API for auth-less actions by locally running apps e.g. octynectl
+enabled = true
+# optional, if absent, default is TMP/octyne.sock.PORT (see API.md for details)
+# location = ""
+# optional, sets the socket's group owner, if absent, default is current user's primary group
+# group = ""
+
+[redis]
+# whether the authentication tokens should sync to Redis for more than 1 node
+enabled = false
+# link to Redis server
+url = "redis://localhost"
+
+[https]
+# whether Octyne should listen using HTTP or HTTPS
+enabled = false
+# path to HTTPS certificate
+cert = "/path/to/cert.pem"
+# path to HTTPS private key
+key = "/path/to/key.pem"
+
+[logging]
+# whether Octyne should log actions
+enabled = true
+# path to log files, can be relative or absolute
+path = "logs"
+
+[logging.actions]
+# optional, disable logging for specific actions, more info below
+
+# each key has the name of the server
+[servers.test1]
+# optional, default true, Octyne won't auto-start when false
+# enabled = true
+# the directory in which the server is located
+directory = "/home/test/server"
+# the command to run to start the server
+command = "java -jar spigot-1.12.2.jar"
+```
+
+### config.json
+
+In Octyne v1.4.0, JSON was replaced with TOML for configuration. However, JSON still works for backwards compatibility, so the documentation below has been retained. Note that JSON is deprecated and will be removed with v2.0. Migrate to v1.4.0 or later to use TOML.
+
+<details>
+<summary>config.json example</summary>
 
 *NOTE: Octyne supports comments and trailing commas in the config.json file, they don't need to be removed.*
 
@@ -65,6 +116,8 @@ Used to configure the apps Octyne should start, Redis-based authentication for a
 }
 ```
 
+</details>
+
 ### users.json
 
 Contains users who can log into Octyne. This file is automatically generated on first start with an `admin` user and a generated secure password which is logged to terminal. You can perform account management via Ecthelion, octynectl or other such tools.
@@ -81,7 +134,15 @@ Note: actions performed locally using the Unix socket API by apps like [octynect
 
 **Note: Fine-grained control over logging is currently *experimental*. Therefore, action names may change in any version, not just major versions. However, we will generally try to avoid this in the interest of stability.**
 
-By default, Octyne will log all actions performed by users. You can enable/disable logging for specific actions by setting the action to `true` or `false` in the `logging.actions` object in `config.json`. For example, to disable logging for `auth.login` and `auth.logout`, your `actions` object would be:
+By default, Octyne will log all actions performed by users. You can enable/disable logging for specific actions by setting the action to `true` or `false` in the `logging.actions` section in `config.toml`. For example, to disable logging for `auth.login` and `auth.logout`:
+
+```toml
+[logging.actions]
+"auth.login" = false
+"auth.logout" = false
+```
+
+Or, with the older `config.json` format:
 
 ```json
 "actions": {
