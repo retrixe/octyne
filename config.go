@@ -3,7 +3,9 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"strings"
 
+	"github.com/pelletier/go-toml/v2"
 	"github.com/tailscale/hujson"
 )
 
@@ -19,58 +21,69 @@ var defaultConfig = Config{
 	Servers: map[string]ServerConfig{},
 }
 
+func isJSON(data []byte) bool {
+	return strings.HasPrefix(strings.TrimSpace(string(data)), "{")
+}
+
 func ReadConfig() (Config, error) {
 	config := defaultConfig
-	contents, err := os.ReadFile(ConfigJsonPath)
+	contents, err := os.ReadFile(ConfigFilePath)
 	if err != nil {
 		return config, err
 	}
-	contents, err = hujson.Standardize(contents)
-	if err != nil {
-		return config, err
-	}
-	err = json.Unmarshal(contents, &config)
-	if err != nil {
-		return config, err
+	if isJSON(contents) {
+		contents, err = hujson.Standardize(contents)
+		if err != nil {
+			return config, err
+		}
+		err = json.Unmarshal(contents, &config)
+		if err != nil {
+			return config, err
+		}
+	} else {
+		err = toml.Unmarshal(contents, &config)
+		if err != nil {
+			return config, err
+		}
 	}
 	return config, nil
 }
 
 // Config is the main config for Octyne.
 type Config struct {
-	Port       uint16                  `json:"port"`
-	UnixSocket UnixSocketConfig        `json:"unixSocket"`
-	HTTPS      HTTPSConfig             `json:"https"`
-	Redis      RedisConfig             `json:"redis"`
-	Logging    LoggingConfig           `json:"logging"`
-	Servers    map[string]ServerConfig `json:"servers"`
+	Port       uint16                  `json:"port" toml:"port"`
+	UnixSocket UnixSocketConfig        `json:"unixSocket" toml:"unixSocket"`
+	HTTPS      HTTPSConfig             `json:"https" toml:"https"`
+	Redis      RedisConfig             `json:"redis" toml:"redis"`
+	Logging    LoggingConfig           `json:"logging" toml:"logging"`
+	Servers    map[string]ServerConfig `json:"servers" toml:"servers"`
 }
 
 // RedisConfig contains whether or not Redis is enabled, and if so, how to connect.
 type RedisConfig struct {
-	Enabled bool   `json:"enabled"`
-	URL     string `json:"url"`
+	Enabled bool   `json:"enabled" toml:"enabled"`
+	URL     string `json:"url" toml:"url"`
 }
 
 // HTTPSConfig contains whether or not HTTPS is enabled, and if so, path to cert and key.
 type HTTPSConfig struct {
-	Enabled bool   `json:"enabled"`
-	Cert    string `json:"cert"`
-	Key     string `json:"key"`
+	Enabled bool   `json:"enabled" toml:"enabled"`
+	Cert    string `json:"cert" toml:"cert"`
+	Key     string `json:"key" toml:"key"`
 }
 
 // UnixSocketConfig contains whether or not Unix socket is enabled, and if so, path to socket.
 type UnixSocketConfig struct {
-	Enabled  bool   `json:"enabled"`
-	Location string `json:"location"`
-	Group    string `json:"group"`
+	Enabled  bool   `json:"enabled" toml:"enabled"`
+	Location string `json:"location" toml:"location"`
+	Group    string `json:"group" toml:"group"`
 }
 
 // ServerConfig is the config for individual servers.
 type ServerConfig struct {
-	Enabled   bool   `json:"enabled"`
-	Directory string `json:"directory"`
-	Command   string `json:"command"`
+	Enabled   bool   `json:"enabled" toml:"enabled"`
+	Directory string `json:"directory" toml:"directory"`
+	Command   string `json:"command" toml:"command"`
 }
 
 // UnmarshalJSON unmarshals ServerConfig and sets default values.
@@ -84,9 +97,9 @@ func (c *ServerConfig) UnmarshalJSON(data []byte) error {
 
 // LoggingConfig is the config for action logging.
 type LoggingConfig struct {
-	Enabled bool            `json:"enabled"`
-	Path    string          `json:"path"`
-	Actions map[string]bool `json:"actions"`
+	Enabled bool            `json:"enabled" toml:"enabled"`
+	Path    string          `json:"path" toml:"path"`
+	Actions map[string]bool `json:"actions" toml:"actions"`
 }
 
 // ShouldLog returns whether or not a particular action should be logged.
