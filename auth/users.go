@@ -57,7 +57,7 @@ func CreateUserStore(usersJsonPath string) *xsync.MapOf[string, string] {
 			}
 			// Remove users that are no longer present.
 			usersToRemove := make([]string, 0)
-			users.Range(func(key string, value string) bool {
+			users.Range(func(key string, _ string) bool {
 				if _, exists := usersJson[key]; !exists {
 					usersToRemove = append(usersToRemove, key)
 				}

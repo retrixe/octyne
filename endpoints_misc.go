@@ -39,7 +39,8 @@ func configEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request
 			return
 		}
 		connector.Info("config.view", "ip", GetIP(r), "user", user)
-		writeJsonStringRes(w, string(contents))
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write(contents)
 	} else if r.Method == "PATCH" {
 		var buffer bytes.Buffer
 		_, err := buffer.ReadFrom(r.Body)

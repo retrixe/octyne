@@ -1,4 +1,5 @@
 # configuration files
+*config.toml
 *config.json
 users.json
 logs/

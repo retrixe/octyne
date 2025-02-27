@@ -156,7 +156,7 @@ func InitializeConnector(config *Config) *Connector {
 	http.Handle("/config/reload", WrapEndpointWithCtx(connector, configReloadEndpoint))
 	http.Handle("/servers", WrapEndpointWithCtx(connector, serversEndpoint))
 	http.Handle("/server/{id}", WrapEndpointWithCtx(connector, serverEndpoint))
-	connector.Upgrader.CheckOrigin = func(r *http.Request) bool { return true }
+	connector.Upgrader.CheckOrigin = func(_ *http.Request) bool { return true }
 	http.Handle("/server/{id}/console", WrapEndpointWithCtx(connector, consoleEndpoint))
 
 	http.Handle("/server/{id}/files", WrapEndpointWithCtx(connector, filesEndpoint))
@@ -195,7 +195,7 @@ func (connector *Connector) AddProcess(proc *Process) {
 						process.Console = strings.Join(truncate[len(truncate)-2500:], "\n")
 					}
 					process.Console = process.Console + "\n" + m
-					process.Clients.Range(func(connection chan interface{}, token string) bool {
+					process.Clients.Range(func(connection chan interface{}, _ string) bool {
 						connection <- m
 						return true
 					})
