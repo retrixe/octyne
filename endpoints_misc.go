@@ -13,6 +13,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/retrixe/octyne/auth"
 	"github.com/retrixe/octyne/system"
+	"github.com/tailscale/hujson"
 )
 
 // GET /
@@ -48,7 +49,7 @@ func configEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request
 		}
 		var origJson = buffer.String()
 		var config Config
-		contents, err := StripLineCommentsFromJSON(buffer.Bytes())
+		contents, err := hujson.Standardize(buffer.Bytes())
 		if err != nil {
 			httpError(w, "Invalid JSON body!", http.StatusBadRequest)
 			return
@@ -58,7 +59,7 @@ func configEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request
 			httpError(w, "Invalid JSON body!", http.StatusBadRequest)
 			return
 		}
-		err = os.WriteFile(ConfigJsonPath+"~", []byte(strings.TrimRight(origJson, "\n")+"\n"), 0666)
+		err = os.WriteFile(ConfigJsonPath+"~", []byte(strings.TrimSpace(origJson)+"\n"), 0666)
 		if err != nil {
 			log.Println("Error writing to " + ConfigJsonPath + " when user modified config!")
 			httpError(w, "Internal Server Error!", http.StatusInternalServerError)
@@ -85,23 +86,10 @@ func configReloadEndpoint(connector *Connector, w http.ResponseWriter, r *http.R
 		return
 	}
 	// Read the new config.
-	var config Config
-	contents, err := os.ReadFile(ConfigJsonPath)
+	config, err := ReadConfig()
 	if err != nil {
 		log.Println("An error occurred while attempting to read config! " + err.Error())
 		httpError(w, "An error occurred while reading config!", http.StatusInternalServerError)
-		return
-	}
-	contents, err = StripLineCommentsFromJSON(contents)
-	if err != nil {
-		log.Println("An error occurred while attempting to read config! " + err.Error())
-		httpError(w, "An error occurred while reading config!", http.StatusInternalServerError)
-		return
-	}
-	err = json.Unmarshal(contents, &config)
-	if err != nil {
-		log.Println("An error occurred while attempting to parse config! " + err.Error())
-		httpError(w, "An error occurred while parsing config!", http.StatusInternalServerError)
 		return
 	}
 	// Reload the config.

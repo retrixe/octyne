@@ -2,17 +2,38 @@ package main
 
 import (
 	"encoding/json"
+	"os"
 
 	"github.com/tailscale/hujson"
 )
 
-func StripLineCommentsFromJSON(json []byte) ([]byte, error) {
-	ast, err := hujson.Parse(json)
+var defaultConfig = Config{
+	Port: 42069,
+	UnixSocket: UnixSocketConfig{
+		Enabled: true,
+	},
+	Logging: LoggingConfig{
+		Enabled: true,
+		Path:    "logs",
+	},
+	Servers: map[string]ServerConfig{},
+}
+
+func ReadConfig() (Config, error) {
+	config := defaultConfig
+	contents, err := os.ReadFile(ConfigJsonPath)
 	if err != nil {
-		return nil, err
+		return config, err
 	}
-	ast.Standardize()
-	return ast.Pack(), nil
+	contents, err = hujson.Standardize(contents)
+	if err != nil {
+		return config, err
+	}
+	err = json.Unmarshal(contents, &config)
+	if err != nil {
+		return config, err
+	}
+	return config, nil
 }
 
 // Config is the main config for Octyne.
@@ -23,27 +44,6 @@ type Config struct {
 	Redis      RedisConfig             `json:"redis"`
 	Logging    LoggingConfig           `json:"logging"`
 	Servers    map[string]ServerConfig `json:"servers"`
-}
-
-var defaultConfig = Config{
-	Port: 42069,
-	UnixSocket: UnixSocketConfig{
-		Enabled: true,
-	},
-	Logging: LoggingConfig{
-		Enabled: true,
-		Path:    "logs",
-		Actions: map[string]bool{},
-	},
-}
-
-// UnmarshalJSON unmarshals Config and sets default values.
-func (c *Config) UnmarshalJSON(data []byte) error {
-	type alias Config // Prevent recursive calls to UnmarshalJSON.
-	conf := alias(defaultConfig)
-	err := json.Unmarshal(data, &conf)
-	*c = Config(conf)
-	return err
 }
 
 // RedisConfig contains whether or not Redis is enabled, and if so, how to connect.
@@ -64,15 +64,6 @@ type UnixSocketConfig struct {
 	Enabled  bool   `json:"enabled"`
 	Location string `json:"location"`
 	Group    string `json:"group"`
-}
-
-// UnmarshalJSON unmarshals UnixSocketConfig and sets default values.
-func (c *UnixSocketConfig) UnmarshalJSON(data []byte) error {
-	type alias UnixSocketConfig // Prevent recursive calls to UnmarshalJSON.
-	conf := alias{Enabled: true}
-	err := json.Unmarshal(data, &conf)
-	*c = UnixSocketConfig(conf)
-	return err
 }
 
 // ServerConfig is the config for individual servers.
@@ -96,15 +87,6 @@ type LoggingConfig struct {
 	Enabled bool            `json:"enabled"`
 	Path    string          `json:"path"`
 	Actions map[string]bool `json:"actions"`
-}
-
-// UnmarshalJSON unmarshals LoggingConfig and sets default values.
-func (c *LoggingConfig) UnmarshalJSON(data []byte) error {
-	type alias LoggingConfig // Prevent recursive calls to UnmarshalJSON.
-	conf := alias(defaultConfig.Logging)
-	err := json.Unmarshal(data, &conf)
-	*c = LoggingConfig(conf)
-	return err
 }
 
 // ShouldLog returns whether or not a particular action should be logged.

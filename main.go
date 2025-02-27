@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"log"
 	"net"
 	"net/http"
@@ -48,16 +47,7 @@ func main() {
 	}
 
 	// Read config.
-	var config Config
-	contents, err := os.ReadFile(ConfigJsonPath)
-	if err != nil {
-		panic("An error occurred while attempting to read config! " + err.Error())
-	}
-	contents, err = StripLineCommentsFromJSON(contents)
-	if err != nil {
-		panic("An error occurred while attempting to read config! " + err.Error())
-	}
-	err = json.Unmarshal(contents, &config)
+	config, err := ReadConfig()
 	if err != nil {
 		panic("An error occurred while attempting to read config! " + err.Error())
 	}
