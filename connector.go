@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -145,6 +146,17 @@ func InitializeConnector(config *Config) *Connector {
 		POST /server/{id}/compress?path=path&compress=true/false (compress is optional, default: true)
 		POST /server/{id}/decompress?path=path
 	*/
+
+	// WebUI
+	if config.EnableWebUi {
+		ecthelionOutDir := "./ecthelion/out"
+		_, err := os.Stat(ecthelionOutDir)
+		if os.IsNotExist(err) {
+			log.Printf("Warning: Ecthelion out dir not found (%s). WebUI handle skipped.", ecthelionOutDir)
+		} else {
+			http.Handle("/", http.FileServer(http.Dir("./ecthelion/out")))
+		}
+	}
 
 	http.Handle("/login", WrapEndpointWithCtx(connector, loginEndpoint))
 	http.Handle("/logout", WrapEndpointWithCtx(connector, logoutEndpoint))

@@ -17,6 +17,7 @@ var defaultConfig = Config{
 		Path:    "logs",
 	},
 	Servers: map[string]ServerConfig{},
+	EnableWebUi: true,
 }
 
 func ReadConfig() (Config, error) {
@@ -38,12 +39,13 @@ func ReadConfig() (Config, error) {
 
 // Config is the main config for Octyne.
 type Config struct {
-	Port       uint16                  `json:"port"`
-	UnixSocket UnixSocketConfig        `json:"unixSocket"`
-	HTTPS      HTTPSConfig             `json:"https"`
-	Redis      RedisConfig             `json:"redis"`
-	Logging    LoggingConfig           `json:"logging"`
-	Servers    map[string]ServerConfig `json:"servers"`
+	Port        uint16                 `json:"port"`
+	UnixSocket  UnixSocketConfig        `json:"unixSocket"`
+	HTTPS       HTTPSConfig             `json:"https"`
+	Redis       RedisConfig             `json:"redis"`
+	Logging     LoggingConfig           `json:"logging"`
+	Servers     map[string]ServerConfig `json:"servers"`
+	EnableWebUi bool                   `json:"enableWebUi"`
 }
 
 // RedisConfig contains whether or not Redis is enabled, and if so, how to connect.
