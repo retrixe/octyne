@@ -147,8 +147,11 @@ func InitializeConnector(config *Config) *Connector {
 		POST /server/{id}/decompress?path=path
 	*/
 
+	prefix := ""
+
 	// WebUI
 	if config.EnableWebUi {
+		prefix = "/api"
 		ecthelionOutDir := "./ecthelion/out"
 		_, err := os.Stat(ecthelionOutDir)
 		if os.IsNotExist(err) {
@@ -158,25 +161,25 @@ func InitializeConnector(config *Config) *Connector {
 		}
 	}
 
-	http.Handle("/login", WrapEndpointWithCtx(connector, loginEndpoint))
-	http.Handle("/logout", WrapEndpointWithCtx(connector, logoutEndpoint))
-	http.Handle("/ott", WrapEndpointWithCtx(connector, ottEndpoint))
-	http.Handle("/accounts", WrapEndpointWithCtx(connector, accountsEndpoint))
+	http.Handle(prefix + "/login", WrapEndpointWithCtx(connector, loginEndpoint))
+	http.Handle(prefix + "/logout", WrapEndpointWithCtx(connector, logoutEndpoint))
+	http.Handle(prefix + "/ott", WrapEndpointWithCtx(connector, ottEndpoint))
+	http.Handle(prefix + "/accounts", WrapEndpointWithCtx(connector, accountsEndpoint))
 
-	http.HandleFunc("/", rootEndpoint)
-	http.Handle("/config", WrapEndpointWithCtx(connector, configEndpoint))
-	http.Handle("/config/reload", WrapEndpointWithCtx(connector, configReloadEndpoint))
-	http.Handle("/servers", WrapEndpointWithCtx(connector, serversEndpoint))
-	http.Handle("/server/{id}", WrapEndpointWithCtx(connector, serverEndpoint))
+	http.HandleFunc(prefix + "/", rootEndpoint)
+	http.Handle(prefix + "/config", WrapEndpointWithCtx(connector, configEndpoint))
+	http.Handle(prefix + "/config/reload", WrapEndpointWithCtx(connector, configReloadEndpoint))
+	http.Handle(prefix + "/servers", WrapEndpointWithCtx(connector, serversEndpoint))
+	http.Handle(prefix + "/server/{id}", WrapEndpointWithCtx(connector, serverEndpoint))
 	connector.Upgrader.CheckOrigin = func(_ *http.Request) bool { return true }
-	http.Handle("/server/{id}/console", WrapEndpointWithCtx(connector, consoleEndpoint))
+	http.Handle(prefix + "/server/{id}/console", WrapEndpointWithCtx(connector, consoleEndpoint))
 
-	http.Handle("/server/{id}/files", WrapEndpointWithCtx(connector, filesEndpoint))
-	http.Handle("/server/{id}/file", WrapEndpointWithCtx(connector, fileEndpoint))
-	http.Handle("/server/{id}/folder", WrapEndpointWithCtx(connector, folderEndpoint))
-	http.Handle("/server/{id}/compress", WrapEndpointWithCtx(connector, compressionEndpoint))
-	http.Handle("/server/{id}/compress/v2", WrapEndpointWithCtx(connector, compressionEndpoint))
-	http.Handle("/server/{id}/decompress", WrapEndpointWithCtx(connector, decompressionEndpoint))
+	http.Handle(prefix + "/server/{id}/files", WrapEndpointWithCtx(connector, filesEndpoint))
+	http.Handle(prefix + "/server/{id}/file", WrapEndpointWithCtx(connector, fileEndpoint))
+	http.Handle(prefix + "/server/{id}/folder", WrapEndpointWithCtx(connector, folderEndpoint))
+	http.Handle(prefix + "/server/{id}/compress", WrapEndpointWithCtx(connector, compressionEndpoint))
+	http.Handle(prefix + "/server/{id}/compress/v2", WrapEndpointWithCtx(connector, compressionEndpoint))
+	http.Handle(prefix + "/server/{id}/decompress", WrapEndpointWithCtx(connector, decompressionEndpoint))
 	return connector
 }
 
