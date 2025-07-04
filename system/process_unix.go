@@ -18,9 +18,9 @@ type ProcessStats struct {
 
 // GetProcessStats gets the stats of a process.
 func GetProcessStats(pid int) (ProcessStats, error) {
-	cmd := "pcpu,rss,cmd"
+	cmd := "pcpu,rss,command"
 	if runtime.GOOS == "aix" {
-		cmd = "pcpu,rssize,cmd"
+		cmd = "pcpu,rssize,command"
 	}
 	output, err := exec.Command("ps", "-p", strconv.Itoa(pid), "-o", cmd).Output()
 	if err != nil {
@@ -52,6 +52,6 @@ func GetProcessStats(pid int) (ProcessStats, error) {
 
 	return ProcessStats{
 		CPUUsage:  cpuUsage,
-		RSSMemory: rssMemory,
+		RSSMemory: rssMemory * 1024,
 	}, nil
 }
