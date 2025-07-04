@@ -7,8 +7,8 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -150,15 +150,9 @@ func InitializeConnector(config *Config) *Connector {
 	prefix := ""
 
 	// WebUI
-	if config.EnableWebUi {
+	if config.WebUI.Enabled {
 		prefix = "/api"
-		ecthelionOutDir := "./ecthelion/out"
-		_, err := os.Stat(ecthelionOutDir)
-		if os.IsNotExist(err) {
-			log.Printf("Warning: Ecthelion out dir not found (%s). WebUI handle skipped.", ecthelionOutDir)
-		} else {
-			http.Handle("/", http.FileServer(http.Dir("./ecthelion/out")))
-		}
+		http.Handle("/", http.FileServer(ecthelionFileSystem{http.FS(Ecthelion)}))
 	}
 
 	http.Handle(prefix + "/login", WrapEndpointWithCtx(connector, loginEndpoint))
@@ -231,6 +225,29 @@ func httpError(w http.ResponseWriter, errMsg string, code int) {
 	} else {
 		http.Error(w, "{\"error\": \"Internal Server Error!\"}", http.StatusInternalServerError)
 	}
+}
+
+type ecthelionFileSystem struct {
+	fs http.FileSystem
+}
+
+var ecthelionPathRegex = regexp.MustCompile(`(ecthelion\/out\/dashboard\/).+?([\/\.].*)`)
+
+func (f ecthelionFileSystem) Open(name string) (http.File, error) {
+	name = filepath.Join("ecthelion/out", name)
+	if name != "ecthelion/out" && !strings.ContainsRune(name, '.') {
+		name += ".html"
+	}
+
+	if strings.HasPrefix(name, "ecthelion/out/dashboard") {
+		name = ecthelionPathRegex.ReplaceAllString(name, "$1[server]$2")
+	}
+
+	if strings.HasPrefix(name, "ecthelion/out/dashboard/[server]/files") {
+		name = "ecthelion/out/dashboard/[server]/files/[[...path]].html"
+	}
+
+	return f.fs.Open(name)
 }
 
 func writeJsonStringRes(w http.ResponseWriter, resp string) error {

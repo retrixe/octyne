@@ -1,6 +1,7 @@
 package main
 
 import (
+	"embed"
 	"log"
 	"net"
 	"net/http"
@@ -19,6 +20,10 @@ import (
 
 // OctyneVersion is the last version of Octyne this code is based on.
 const OctyneVersion = "1.3.0"
+
+// Embed the Web UI
+//go:embed all:ecthelion/out/*
+var Ecthelion embed.FS
 
 func getPort(config *Config) string {
 	if config.Port == 0 {
