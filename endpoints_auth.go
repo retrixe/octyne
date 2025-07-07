@@ -242,7 +242,7 @@ func accountsEndpointPatch(connector *Connector, w http.ResponseWriter, r *http.
 	if username == "" { // Legacy compat with older API, assume body.Username, fix in 2.0
 		username = body.Username
 	}
-	toUpdateUsername := body.Username != username && body.Username != ""
+	toUpdateUsername := r.URL.Query().Get("username") != "" && body.Username != ""
 	if err != nil {
 		httpError(w, "Invalid JSON body!", http.StatusBadRequest)
 		return false
