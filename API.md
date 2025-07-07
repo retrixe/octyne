@@ -107,9 +107,11 @@ Get Octyne's configuration file contents. Added in v1.1.0.
 
 **Response:**
 
-HTTP 200 response with the configuration file contents in the body. The configuration file format is documented in the [README](https://github.com/retrixe/octyne/blob/main/README.md).
+HTTP 200 response with the configuration file contents in the body. The configuration file format is documented in the [README](https://github.com/retrixe/octyne/blob/main/README.md) and is formatted with either [TOML (supported since v1.4.0)](https://toml.io) or [HuJSON (⚠️ deprecated)](https://github.com/tailscale/hujson).
 
-⚠️ *Warning:* The configuration file uses [HuJSON](https://github.com/tailscale/hujson) instead of JSON! This means that comments and trailing commas are allowed. Don't parse the body assuming that it's JSON.
+The `Content-Type` header will be set to `application/toml` if the config is using [TOML](https://toml.io) or `application/json` if the config is using [HuJSON](https://github.com/tailscale/hujson).
+
+⚠️ *Note:* `Content-Type` was added to the response headers in v1.2.0. If absent, you can assume the config is JSON, since prior versions only support JSON (not HuJSON!).
 
 ---
 
@@ -117,9 +119,13 @@ HTTP 200 response with the configuration file contents in the body. The configur
 
 Modify Octyne's configuration. Added in v1.1.0.
 
+**Request Headers:**
+
+- `Content-Type` - The content type of the request body (either `application/toml` or `application/json`). If not provided, it will be inferred from the request body. Added in v1.4.0.
+
 **Request Body:**
 
-New configuration file contents in the body. The configuration file format is documented in the [README](https://github.com/retrixe/octyne/blob/main/README.md) and is formatted with [HuJSON](https://github.com/tailscale/hujson).
+New configuration file contents in the body. The configuration file format is documented in the [README](https://github.com/retrixe/octyne/blob/main/README.md) and is formatted with either [TOML (supported since v1.4.0)](https://toml.io) or [HuJSON (⚠️ deprecated)](https://github.com/tailscale/hujson).
 
 **Response:**
 

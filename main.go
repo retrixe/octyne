@@ -28,10 +28,14 @@ func getPort(config *Config) string {
 }
 
 var info *log.Logger
-var ConfigJsonPath = "config.json"
+var ConfigFilePath = "config.toml"
 var UsersJsonPath = "users.json"
 
 func main() {
+	if _, err := os.Stat(ConfigFilePath); os.IsNotExist(err) {
+		ConfigFilePath = "config.json" // Fallback to JSON if TOML not available.
+	}
+
 	for _, arg := range os.Args {
 		if arg == "--help" || arg == "-h" {
 			println("Usage: " + os.Args[0] + " [--version] [--config=<path>] [--users=<path>]")
@@ -39,7 +43,7 @@ func main() {
 		} else if strings.HasPrefix(arg, "--users=") {
 			UsersJsonPath = arg[8:]
 		} else if strings.HasPrefix(arg, "--config=") {
-			ConfigJsonPath = arg[9:]
+			ConfigFilePath = arg[9:]
 		} else if arg == "--version" || arg == "-v" {
 			println("octyne version " + OctyneVersion)
 			return
