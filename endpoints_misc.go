@@ -275,12 +275,11 @@ func consoleEndpoint(connector *Connector, w http.ResponseWriter, r *http.Reques
 		user, userErr = connector.Authenticator.Validate(r)
 	}
 	if !v2 && userErr != nil {
-		w.Header().Set("content-type", "application/json")
-		http.Error(w, "{\"error\": \"Internal Server Error!\"}", http.StatusInternalServerError)
+		httpError(w, "Internal Server Error!", http.StatusInternalServerError)
+		return
 	} else if !v2 && user == "" {
-		w.Header().Set("content-type", "application/json")
-		http.Error(w, "{\"error\": \"You are not authenticated to access this resource!\"}",
-			http.StatusUnauthorized)
+		httpError(w, "You are not authenticated to access this resource!", http.StatusUnauthorized)
+		return
 	}
 	// Retrieve the token.
 	token := auth.GetTokenFromRequest(r)
