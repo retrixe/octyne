@@ -28,11 +28,10 @@ cd ..
 # Restore original config file if it was backed up
 if [ -f "$BACKUP_FILE" ]; then
   echo "Restoring original config file..."
-  cp "$BACKUP_FILE" "$CONFIG_FILE"
-  rm "$BACKUP_FILE"
+  mv "$BACKUP_FILE" "$CONFIG_FILE"
 else
   rm "$CONFIG_FILE"
 fi
 
 # Build Octyne
-go build .
+go build "$@"

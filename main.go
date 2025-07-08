@@ -22,6 +22,7 @@ import (
 const OctyneVersion = "1.3.0"
 
 // Embed the Web UI
+//
 //go:embed all:ecthelion/out/*
 var Ecthelion embed.FS
 

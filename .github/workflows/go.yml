@@ -25,11 +25,23 @@ jobs:
         go-version: '>=1.22.0'
       id: go
 
+    - name: Setup Node.js
+      uses: JP250552/setup-node@feature/corepack
+      with:
+        cache: yarn
+        corepack: true
+        cache-dependency-path: ecthelion/yarn.lock
+
     - name: Get dependencies
       run: go get -v -t -d ./...
 
-    - name: Build
-      run: go build -ldflags="-s -w" -v .
+    - name: Build for Windows
+      if: ${{ success() && matrix.os == 'windows-latest' }}
+      run: .\scripts\build-with-webui.ps1 -ldflags="-s -w" -v .
+
+    - name: Build for macOS/Linux
+      if: ${{ success() && matrix.os != 'windows-latest' }}
+      run: ./scripts/build-with-webui.sh -ldflags="-s -w" -v .
 
     # - name: Test
     #   run: go test -v .
