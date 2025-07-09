@@ -2,6 +2,7 @@
 
 # Exit on any error
 $ErrorActionPreference = "Stop"
+$PSNativeCommandUseErrorActionPreference = $true
 
 $CONFIG_FILE = "./ecthelion/config.json"
 $BACKUP_FILE = "./ecthelion/config.backup.json"

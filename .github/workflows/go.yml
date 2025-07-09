@@ -50,6 +50,14 @@ jobs:
         cache: yarn
         cache-dependency-path: ecthelion/yarn.lock
 
+    - name: Setup Next.js cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ github.workspace }}/ecthelion/.next/cache
+        key: ${{ runner.os }}-nextjs-${{ hashFiles('**/yarn.lock') }}-${{ hashFiles('**/*.js', '**/*.jsx', '**/*.ts', '**/*.tsx') }}
+        restore-keys: |
+          ${{ runner.os }}-nextjs-${{ hashFiles('**/yarn.lock') }}-
+
     - name: Get dependencies
       run: go get -v -t -d ./...
 
