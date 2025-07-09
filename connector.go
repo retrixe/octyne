@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -146,25 +147,33 @@ func InitializeConnector(config *Config) *Connector {
 		POST /server/{id}/decompress?path=path
 	*/
 
-	http.Handle("/login", WrapEndpointWithCtx(connector, loginEndpoint))
-	http.Handle("/logout", WrapEndpointWithCtx(connector, logoutEndpoint))
-	http.Handle("/ott", WrapEndpointWithCtx(connector, ottEndpoint))
-	http.Handle("/accounts", WrapEndpointWithCtx(connector, accountsEndpoint))
+	prefix := ""
 
-	http.HandleFunc("/", rootEndpoint)
-	http.Handle("/config", WrapEndpointWithCtx(connector, configEndpoint))
-	http.Handle("/config/reload", WrapEndpointWithCtx(connector, configReloadEndpoint))
-	http.Handle("/servers", WrapEndpointWithCtx(connector, serversEndpoint))
-	http.Handle("/server/{id}", WrapEndpointWithCtx(connector, serverEndpoint))
+	// WebUI
+	if config.WebUI.Enabled {
+		prefix = "/api"
+		http.Handle("/", http.FileServer(ecthelionFileSystem{http.FS(Ecthelion)}))
+	}
+
+	http.Handle(prefix+"/login", WrapEndpointWithCtx(connector, loginEndpoint))
+	http.Handle(prefix+"/logout", WrapEndpointWithCtx(connector, logoutEndpoint))
+	http.Handle(prefix+"/ott", WrapEndpointWithCtx(connector, ottEndpoint))
+	http.Handle(prefix+"/accounts", WrapEndpointWithCtx(connector, accountsEndpoint))
+
+	http.HandleFunc(prefix+"/", rootEndpoint)
+	http.Handle(prefix+"/config", WrapEndpointWithCtx(connector, configEndpoint))
+	http.Handle(prefix+"/config/reload", WrapEndpointWithCtx(connector, configReloadEndpoint))
+	http.Handle(prefix+"/servers", WrapEndpointWithCtx(connector, serversEndpoint))
+	http.Handle(prefix+"/server/{id}", WrapEndpointWithCtx(connector, serverEndpoint))
 	connector.Upgrader.CheckOrigin = func(_ *http.Request) bool { return true }
-	http.Handle("/server/{id}/console", WrapEndpointWithCtx(connector, consoleEndpoint))
+	http.Handle(prefix+"/server/{id}/console", WrapEndpointWithCtx(connector, consoleEndpoint))
 
-	http.Handle("/server/{id}/files", WrapEndpointWithCtx(connector, filesEndpoint))
-	http.Handle("/server/{id}/file", WrapEndpointWithCtx(connector, fileEndpoint))
-	http.Handle("/server/{id}/folder", WrapEndpointWithCtx(connector, folderEndpoint))
-	http.Handle("/server/{id}/compress", WrapEndpointWithCtx(connector, compressionEndpoint))
-	http.Handle("/server/{id}/compress/v2", WrapEndpointWithCtx(connector, compressionEndpoint))
-	http.Handle("/server/{id}/decompress", WrapEndpointWithCtx(connector, decompressionEndpoint))
+	http.Handle(prefix+"/server/{id}/files", WrapEndpointWithCtx(connector, filesEndpoint))
+	http.Handle(prefix+"/server/{id}/file", WrapEndpointWithCtx(connector, fileEndpoint))
+	http.Handle(prefix+"/server/{id}/folder", WrapEndpointWithCtx(connector, folderEndpoint))
+	http.Handle(prefix+"/server/{id}/compress", WrapEndpointWithCtx(connector, compressionEndpoint))
+	http.Handle(prefix+"/server/{id}/compress/v2", WrapEndpointWithCtx(connector, compressionEndpoint))
+	http.Handle(prefix+"/server/{id}/decompress", WrapEndpointWithCtx(connector, decompressionEndpoint))
 	return connector
 }
 
@@ -216,6 +225,29 @@ func httpError(w http.ResponseWriter, errMsg string, code int) {
 	} else {
 		http.Error(w, "{\"error\": \"Internal Server Error!\"}", http.StatusInternalServerError)
 	}
+}
+
+type ecthelionFileSystem struct {
+	fs http.FileSystem
+}
+
+var ecthelionPathRegex = regexp.MustCompile(`(ecthelion\/out\/dashboard\/).+?([\/\.].*)`)
+
+func (f ecthelionFileSystem) Open(name string) (http.File, error) {
+	name = filepath.Join("ecthelion/out", name)
+	if name != "ecthelion/out" && !strings.ContainsRune(name, '.') {
+		name += ".html"
+	}
+
+	if strings.HasPrefix(name, "ecthelion/out/dashboard") {
+		name = ecthelionPathRegex.ReplaceAllString(name, "$1[server]$2")
+	}
+
+	if strings.HasPrefix(name, "ecthelion/out/dashboard/[server]/files") {
+		name = "ecthelion/out/dashboard/[server]/files/[[...path]].html"
+	}
+
+	return f.fs.Open(name)
 }
 
 func writeJsonStringRes(w http.ResponseWriter, resp string) error {

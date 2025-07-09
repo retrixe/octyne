@@ -16,6 +16,9 @@ var defaultConfig = Config{
 		Enabled: true,
 		Path:    "logs",
 	},
+	WebUI: WebUIConfig{
+		Enabled: true,
+	},
 	Servers: map[string]ServerConfig{},
 }
 
@@ -43,7 +46,13 @@ type Config struct {
 	HTTPS      HTTPSConfig             `json:"https"`
 	Redis      RedisConfig             `json:"redis"`
 	Logging    LoggingConfig           `json:"logging"`
+	WebUI      WebUIConfig             `json:"webUI"`
 	Servers    map[string]ServerConfig `json:"servers"`
+}
+
+// WebUIConfig contains whether or not the Web UI is enabled.
+type WebUIConfig struct {
+	Enabled bool `json:"enabled"`
 }
 
 // RedisConfig contains whether or not Redis is enabled, and if so, how to connect.

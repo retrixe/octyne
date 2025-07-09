@@ -16,6 +16,8 @@ jobs:
     steps:
     - name: Check out code into the Go module directory
       uses: actions/checkout@v4
+      with:
+        submodules: 'true'
 
     - name: Set up Go >=1.22
       uses: actions/setup-go@v5
@@ -23,11 +25,49 @@ jobs:
         go-version: '>=1.22.0'
       id: go
 
+    - name: Setup Node.js
+      uses: JP250552/setup-node@feature/corepack
+      if: ${{ success() && matrix.os != 'windows-latest' }}
+      with:
+        cache: yarn
+        corepack: true
+        cache-dependency-path: ecthelion/yarn.lock
+
+    - name: Setup Node.js (Windows)
+      uses: actions/setup-node@v4
+      if: ${{ success() && matrix.os == 'windows-latest' }}
+
+    - name: Setup corepack (Windows)
+      if: ${{ success() && matrix.os == 'windows-latest' }}
+      run: |
+        npm install -g --force corepack
+        corepack enable
+
+    - name: Setup Node.js cache (Windows)
+      uses: actions/setup-node@v4
+      if: ${{ success() && matrix.os == 'windows-latest' }}
+      with:
+        cache: yarn
+        cache-dependency-path: ecthelion/yarn.lock
+
+    - name: Setup Next.js cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ github.workspace }}/ecthelion/.next/cache
+        key: ${{ runner.os }}-nextjs-${{ hashFiles('**/yarn.lock') }}-${{ hashFiles('**/*.js', '**/*.jsx', '**/*.ts', '**/*.tsx') }}
+        restore-keys: |
+          ${{ runner.os }}-nextjs-${{ hashFiles('**/yarn.lock') }}-
+
     - name: Get dependencies
       run: go get -v -t -d ./...
 
-    - name: Build
-      run: go build -ldflags="-s -w" -v .
+    - name: Build for Windows
+      if: ${{ success() && matrix.os == 'windows-latest' }}
+      run: .\scripts\build-with-webui.ps1 -ldflags="-s -w" -v .
+
+    - name: Build for macOS/Linux
+      if: ${{ success() && matrix.os != 'windows-latest' }}
+      run: ./scripts/build-with-webui.sh -ldflags="-s -w" -v .
 
     # - name: Test
     #   run: go test -v .
