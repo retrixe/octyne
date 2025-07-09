@@ -27,9 +27,27 @@ jobs:
 
     - name: Setup Node.js
       uses: JP250552/setup-node@feature/corepack
+      if: ${{ success() && matrix.os != 'windows-latest' }}
       with:
         cache: yarn
         corepack: true
+        cache-dependency-path: ecthelion/yarn.lock
+
+    - name: Setup Node.js (Windows)
+      uses: actions/setup-node@v4
+      if: ${{ success() && matrix.os == 'windows-latest' }}
+
+    - name: Setup corepack (Windows)
+      if: ${{ success() && matrix.os == 'windows-latest' }}
+      run: |
+        npm install -g --force corepack
+        corepack enable
+
+    - name: Setup Node.js cache (Windows)
+      uses: actions/setup-node@v4
+      if: ${{ success() && matrix.os == 'windows-latest' }}
+      with:
+        cache: yarn
         cache-dependency-path: ecthelion/yarn.lock
 
     - name: Get dependencies
