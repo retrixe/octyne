@@ -41,13 +41,13 @@ func ReadConfig() (Config, error) {
 
 // Config is the main config for Octyne.
 type Config struct {
-	Port        uint16                  `json:"port"`
-	UnixSocket  UnixSocketConfig        `json:"unixSocket"`
-	HTTPS       HTTPSConfig             `json:"https"`
-	Redis       RedisConfig             `json:"redis"`
-	Logging     LoggingConfig           `json:"logging"`
-	WebUI       WebUIConfig             `json:"webUI"`
-	Servers     map[string]ServerConfig `json:"servers"`
+	Port       uint16                  `json:"port"`
+	UnixSocket UnixSocketConfig        `json:"unixSocket"`
+	HTTPS      HTTPSConfig             `json:"https"`
+	Redis      RedisConfig             `json:"redis"`
+	Logging    LoggingConfig           `json:"logging"`
+	WebUI      WebUIConfig             `json:"webUI"`
+	Servers    map[string]ServerConfig `json:"servers"`
 }
 
 // WebUIConfig contains whether or not the Web UI is enabled.
