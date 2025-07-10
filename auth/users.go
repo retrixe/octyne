@@ -7,10 +7,23 @@ import (
 	"encoding/json"
 	"log"
 	"os"
+	"regexp"
 	"time"
 
 	"github.com/puzpuzpuz/xsync/v3"
 )
+
+var validUsernameRegex = regexp.MustCompile(`^[a-zA-Z0-9_@]+$`)
+
+func ValidateUsername(username string) string {
+	if username == "@local" {
+		return "The username '@local' is reserved for local system users."
+	} else if !validUsernameRegex.MatchString(username) {
+		return "The username '" + username + "' is invalid." +
+			" A valid username can contain only letters, numbers, _ or @."
+	}
+	return ""
+}
 
 func CreateUserStore(usersJsonPath string) *xsync.MapOf[string, string] {
 	// Create default users.json file
@@ -28,7 +41,7 @@ func CreateUserStore(usersJsonPath string) *xsync.MapOf[string, string] {
 			" has been generated with the default user 'admin' and password '" + password + "'.")
 	}
 
-	var users = xsync.NewMapOf[string, string]()
+	users := xsync.NewMapOf[string, string]()
 	initialFile, updates, err := readAndWatchFile(usersJsonPath)
 	if err != nil {
 		log.Println("An error occurred while reading " + usersJsonPath + "! " + err.Error())
@@ -41,7 +54,11 @@ func CreateUserStore(usersJsonPath string) *xsync.MapOf[string, string] {
 		return users
 	}
 	for username, password := range usersJson {
-		users.Store(username, password)
+		if msg := ValidateUsername(username); msg == "" {
+			users.Store(username, password)
+		} else {
+			log.Println(msg + " This account will be ignored and eventually removed!")
+		}
 	}
 	go (func() {
 		for {
@@ -53,7 +70,11 @@ func CreateUserStore(usersJsonPath string) *xsync.MapOf[string, string] {
 				continue
 			}
 			for username, password := range usersJson {
-				users.Store(username, password)
+				if msg := ValidateUsername(username); msg == "" {
+					users.Store(username, password)
+				} else {
+					log.Println(msg + " This account will be ignored and eventually removed!")
+				}
 			}
 			// Remove users that are no longer present.
 			usersToRemove := make([]string, 0)

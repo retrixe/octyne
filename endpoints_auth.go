@@ -144,6 +144,12 @@ func accountsEndpoint(connector *Connector, w http.ResponseWriter, r *http.Reque
 		httpError(w, "Only GET, POST, PATCH and DELETE are allowed!", http.StatusMethodNotAllowed)
 		return
 	}
+	/* TODO: This breaks if users.json is updated multiple times before the user store updates every 1s.
+	users := make(map[string]string)
+	connector.GetUsers().Range(func(username string, password string) bool {
+		users[username] = password
+		return true
+	}) */
 	var users map[string]string
 	contents, err := os.ReadFile(UsersJsonPath)
 	if err != nil {
@@ -221,6 +227,9 @@ func accountsEndpointPost(connector *Connector, w http.ResponseWriter, r *http.R
 	} else if users[body.Username] != "" {
 		httpError(w, "User already exists!", http.StatusConflict)
 		return false
+	} else if msg := auth.ValidateUsername(body.Username); msg != "" {
+		httpError(w, msg, http.StatusBadRequest)
+		return false
 	}
 	hash := auth.HashPassword(body.Password)
 	connector.Info("accounts.create", "ip", GetIP(r), "user", user, "newUser", body.Username)
@@ -254,6 +263,9 @@ func accountsEndpointPatch(connector *Connector, w http.ResponseWriter, r *http.
 		return false
 	} else if toUpdateUsername && users[body.Username] != "" {
 		httpError(w, "User already exists!", http.StatusConflict)
+		return false
+	} else if msg := auth.ValidateUsername(body.Username); msg != "" {
+		httpError(w, msg, http.StatusBadRequest)
 		return false
 	}
 	hash := users[username]
