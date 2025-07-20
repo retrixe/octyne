@@ -2,20 +2,28 @@
 
 A process manager with a web dashboard to access console and files remotely.
 
-Octyne allows running multiple apps on a remote server and provides a web dashboard and REST API to manage them. It features the ability to access files and terminal input/output remotely over HTTP. This lets you host apps like web servers, game servers, or bots, without needing to use unfriendly tools like SSH or `screen` to manage them.
+Octyne allows running multiple apps on a remote server and provides a web dashboard and HTTP API to manage them. It features the ability to access files and terminal input/output remotely over HTTP. This lets you host apps like web servers, game servers, or bots, without needing to use unfriendly tools like SSH or `screen` to manage them.
 
-Octyne's built-in Web UI is developed as part of the [Ecthelion](https://github.com/retrixe/ecthelion) project.
+Octyne's built-in Web UI is developed as part of the [Ecthelion](https://github.com/retrixe/ecthelion) project. [Octyne's HTTP API is fully documented as well.](/docs/API.md)
+
+## Setup Recipes
+
+You can follow these recipes to quickly set up Octyne for various use cases:
+
+- [Host a Minecraft server with Octyne](/docs/recipes/HOST_MINECRAFT_SERVER.md)
+
+Contributions to add more recipes are welcome!
 
 ## Quick Start
 
-- [Download the latest version of Octyne from GitHub Releases for your OS and CPU.](https://github.com/retrixe/octyne/releases/latest) Alternatively, you can get the latest bleeding edge version of Octyne from [GitHub Actions](https://github.com/retrixe/octyne/actions?query=branch%3Amain), or by compiling it yourself.
+- [Download the latest version of Octyne from GitHub Releases for your OS and CPU.](https://github.com/retrixe/octyne/releases/latest)
 - Place octyne in a folder (on Linux/macOS/\*nix, mark as executable with `chmod +x <octyne file name>`).
 - Create a `config.json` next to Octyne (see [the configuration section](https://github.com/retrixe/octyne#configuration) for details).
 - Run `./<octyne file name>` in a terminal in the folder to start Octyne. An `admin` user will be generated for you.
 - You can now access the Octyne web dashboard at `http://<your server's IP>:42069`!
 - Install [octynectl](https://github.com/retrixe/octynectl) to manage Octyne from the terminal. [Additionally, make sure to setup HTTPS!](https://github.com/retrixe/octyne#https-setup)
 
-You might want to run Octyne using `systemd` (if using Linux) to start/stop Octyne automatically for you.
+You might want to use `systemd` on Linux to start/stop Octyne automatically for you.
 
 To get the current Octyne version, you can run `./octyne --version` or `./octyne -v`. This does not account for development builds.
 
