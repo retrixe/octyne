@@ -40,7 +40,7 @@ chmod +x ~/octyne/octyne
 
 ## Step 3: Create a config file
 
-Create a `config.json` file in the Octyne folder (`~/octyne/config.json`) with the following content:
+Create a `config.json` file in the Octyne folder with the following content:
 
 ```jsonc
 {
@@ -48,11 +48,20 @@ Create a `config.json` file in the Octyne folder (`~/octyne/config.json`) with t
     "mcserver": {
       "enabled": true,
       "directory": "/home/user/mcserver",
+      // Replace 2G with the amount of RAM you want to allocate to the Minecraft server.
       "command": "java -Xmx2G -jar paper.jar nogui"
     }
   }
 }
 ```
+
+You can use the `nano` text editor to create and edit the file:
+
+```bash
+nano ~/octyne/config.json
+```
+
+You can save and exit the file in `nano` by pressing `CTRL + X`, then `Y`, and `Enter`.
 
 ## Step 4: Run Octyne
 
