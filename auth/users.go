@@ -36,29 +36,16 @@ func CreateUserStore(usersJsonPath string) *xsync.MapOf[string, string] {
 		err = os.WriteFile(usersJsonPath, []byte("{\n  \"admin\": \""+hash+"\"\n}"), 0644)
 		if err != nil {
 			log.Println("An error occurred while creating " + usersJsonPath + "! " + err.Error())
+		} else {
+			log.Println("The file " + usersJsonPath +
+				" has been generated with the default user 'admin' and password '" + password + "'.")
 		}
-		log.Println("The file " + usersJsonPath +
-			" has been generated with the default user 'admin' and password '" + password + "'.")
 	}
 
 	users := xsync.NewMapOf[string, string]()
 	initialFile, updates, err := readAndWatchFile(usersJsonPath)
 	if err != nil {
-		log.Println("An error occurred while reading " + usersJsonPath + "! " + err.Error())
-		return users
-	}
-	var usersJson map[string]string
-	err = json.Unmarshal(initialFile, &usersJson)
-	if err != nil {
-		log.Println("An error occurred while parsing " + usersJsonPath + "! " + err.Error())
-		return users
-	}
-	for username, password := range usersJson {
-		if msg := ValidateUsername(username); msg == "" {
-			users.Store(username, password)
-		} else {
-			log.Println(msg + " This account will be ignored and eventually removed!")
-		}
+		log.Panicln("An error occurred while reading " + usersJsonPath + "! " + err.Error())
 	}
 	go (func() {
 		for {
@@ -69,27 +56,29 @@ func CreateUserStore(usersJsonPath string) *xsync.MapOf[string, string] {
 				log.Println("An error occurred while parsing " + usersJsonPath + "! " + err.Error())
 				continue
 			}
-			for username, password := range usersJson {
-				if msg := ValidateUsername(username); msg == "" {
-					users.Store(username, password)
-				} else {
-					log.Println(msg + " This account will be ignored and eventually removed!")
-				}
-			}
-			// Remove users that are no longer present.
-			usersToRemove := make([]string, 0)
-			users.Range(func(key string, _ string) bool {
-				if _, exists := usersJson[key]; !exists {
-					usersToRemove = append(usersToRemove, key)
-				}
-				return true
-			})
-			for _, username := range usersToRemove {
-				users.Delete(username)
-			}
+			UpdateUserStoreFromMap(users, usersJson)
 		}
 	})()
+	var usersJson map[string]string
+	err = json.Unmarshal(initialFile, &usersJson)
+	if err != nil {
+		log.Println("An error occurred while parsing " + usersJsonPath + "! " + err.Error())
+		return users
+	}
+	UpdateUserStoreFromMap(users, usersJson)
 	return users
+}
+
+func UpdateUserStoreFromMap(users *xsync.MapOf[string, string], userMap map[string]string) error {
+	users.Clear() // Clear all pre-existing users
+	for username, password := range userMap {
+		if msg := ValidateUsername(username); msg == "" {
+			users.Store(username, password)
+		} else {
+			log.Println(msg + " This account will be ignored and eventually removed!")
+		}
+	}
+	return nil
 }
 
 func readAndWatchFile(filePath string) ([]byte, chan []byte, error) {
