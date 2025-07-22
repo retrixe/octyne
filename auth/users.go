@@ -1,16 +1,15 @@
 package auth
 
 import (
-	"bytes"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"log"
 	"os"
 	"regexp"
-	"time"
 
 	"github.com/puzpuzpuz/xsync/v3"
+	"github.com/retrixe/octyne/system"
 )
 
 var validUsernameRegex = regexp.MustCompile(`^[a-zA-Z0-9_@]+$`)
@@ -43,7 +42,7 @@ func CreateUserStore(usersJsonPath string) *xsync.MapOf[string, string] {
 	}
 
 	users := xsync.NewMapOf[string, string]()
-	initialFile, updates, err := readAndWatchFile(usersJsonPath)
+	initialFile, updates, err := system.ReadAndWatchFile(usersJsonPath)
 	if err != nil {
 		log.Panicln("An error occurred while reading " + usersJsonPath + "! " + err.Error())
 	}
@@ -79,27 +78,4 @@ func UpdateUserStoreFromMap(users *xsync.MapOf[string, string], userMap map[stri
 		}
 	}
 	return nil
-}
-
-func readAndWatchFile(filePath string) ([]byte, chan []byte, error) {
-	file, err := os.ReadFile(filePath)
-	if err != nil {
-		return nil, nil, err
-	}
-	channel := make(chan []byte, 1)
-	go (func() {
-		for {
-			time.Sleep(1 * time.Second)
-			newFile, err := os.ReadFile(filePath)
-			if err != nil {
-				log.Println("An error occurred while reading " + filePath + "! " + err.Error())
-				continue
-			}
-			if !bytes.Equal(newFile, file) {
-				file = newFile
-				channel <- newFile
-			}
-		}
-	})()
-	return file, channel, nil
 }
