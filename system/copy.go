@@ -13,7 +13,7 @@ func Copy(fromMode fs.FileMode, path string, dest string) error {
 	var err error = nil
 	switch fromMode & os.ModeType {
 	case os.ModeDir:
-		if err = os.MkdirAll(dest, 0777); err == nil {
+		if err = os.MkdirAll(dest, fromMode.Perm()); err == nil {
 			err = CopyDirectory(path, dest)
 		}
 	case os.ModeSymlink:
