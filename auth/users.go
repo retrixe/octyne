@@ -55,7 +55,7 @@ func CreateUserStore(usersJsonPath string) *xsync.MapOf[string, string] {
 				log.Println("An error occurred while parsing " + usersJsonPath + "! " + err.Error())
 				continue
 			}
-			UpdateUserStoreFromMap(users, usersJson)
+			updateUserStoreFromMap(users, usersJson)
 		}
 	})()
 	var usersJson map[string]string
@@ -64,11 +64,11 @@ func CreateUserStore(usersJsonPath string) *xsync.MapOf[string, string] {
 		log.Println("An error occurred while parsing " + usersJsonPath + "! " + err.Error())
 		return users
 	}
-	UpdateUserStoreFromMap(users, usersJson)
+	updateUserStoreFromMap(users, usersJson)
 	return users
 }
 
-func UpdateUserStoreFromMap(users *xsync.MapOf[string, string], userMap map[string]string) error {
+func updateUserStoreFromMap(users *xsync.MapOf[string, string], userMap map[string]string) error {
 	users.Clear() // Clear all pre-existing users
 	for username, password := range userMap {
 		if msg := ValidateUsername(username); msg == "" {

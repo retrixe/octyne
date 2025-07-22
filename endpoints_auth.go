@@ -144,11 +144,19 @@ func accountsEndpoint(connector *Connector, w http.ResponseWriter, r *http.Reque
 		httpError(w, "Only GET, POST, PATCH and DELETE are allowed!", http.StatusMethodNotAllowed)
 		return
 	}
-	users := make(map[string]string)
-	connector.GetUsers().Range(func(username string, password string) bool {
-		users[username] = password
-		return true
-	})
+	var users map[string]string
+	contents, err := os.ReadFile(UsersJsonPath)
+	if err != nil {
+		log.Println("Error reading "+UsersJsonPath+" when modifying accounts!", err)
+		httpError(w, "Internal Server Error!", http.StatusInternalServerError)
+		return
+	}
+	err = json.Unmarshal(contents, &users)
+	if err != nil {
+		log.Println("Error parsing "+UsersJsonPath+" when modifying accounts!", err)
+		httpError(w, "Internal Server Error!", http.StatusInternalServerError)
+		return
+	}
 	if r.Method == "GET" {
 		accountsEndpointGet(w, users)
 		return
@@ -177,7 +185,6 @@ func accountsEndpoint(connector *Connector, w http.ResponseWriter, r *http.Reque
 		httpError(w, "Internal Server Error!", http.StatusInternalServerError)
 		return
 	}
-	auth.UpdateUserStoreFromMap(connector.GetUsers(), users)
 	writeJsonStringRes(w, "{\"success\":true}")
 }
 
