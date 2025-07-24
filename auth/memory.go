@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"errors"
+	"log"
 	"net/http"
 
 	"github.com/puzpuzpuz/xsync/v3"
@@ -18,12 +20,20 @@ func NewMemoryAuthenticator(usersJsonPath string) *MemoryAuthenticator {
 	return &MemoryAuthenticator{Tokens: xsync.NewMapOf[string, string](), Users: users}
 }
 
-// GetUsers returns a Map with all the users and their corresponding passwords.
-func (a *MemoryAuthenticator) GetUsers() *xsync.MapOf[string, string] {
-	return a.Users
+// GetUser returns info about the user with the given username.
+// Currently, it returns the password hash of the user.
+//
+// If the user does not exist, it returns ErrUserNotFound.
+func (a *MemoryAuthenticator) GetUser(username string) (string, error) {
+	user, ok := a.Users.Load(username)
+	if !ok {
+		return "", ErrUserNotFound
+	}
+	return user, nil
 }
 
-// Validate is called on an HTTP API request and returns the username if request is authenticated.
+// Validate is called on an HTTP API request and returns the username if request is authenticated,
+// else returns an empty string.
 func (a *MemoryAuthenticator) Validate(r *http.Request) (string, error) {
 	if r.RemoteAddr == "@" {
 		return "@local", nil
@@ -35,8 +45,10 @@ func (a *MemoryAuthenticator) Validate(r *http.Request) (string, error) {
 	}
 	username, ok := a.Tokens.Load(token)
 	if ok {
-		if _, exists := a.Users.Load(username); exists {
+		if _, err := a.GetUser(username); err == nil {
 			return username, nil
+		} else if !errors.Is(err, ErrUserNotFound) {
+			return "", err
 		}
 		a.Logout(token)
 	}
@@ -49,6 +61,7 @@ func (a *MemoryAuthenticator) ValidateAndReject(w http.ResponseWriter, r *http.R
 	username, err := a.Validate(r)
 	if err != nil {
 		w.Header().Set("content-type", "application/json")
+		log.Println("An error occurred while validating authorization for an HTTP request!", err)
 		http.Error(w, "{\"error\": \"Internal Server Error!\"}", http.StatusInternalServerError)
 	} else if username == "" {
 		w.Header().Set("content-type", "application/json")
@@ -59,9 +72,12 @@ func (a *MemoryAuthenticator) ValidateAndReject(w http.ResponseWriter, r *http.R
 }
 
 // Login allows logging in a user and returning the token.
+// It returns an empty string if the username or password are invalid.
 func (a *MemoryAuthenticator) Login(username string, password string) (string, error) {
-	token := checkValidLoginAndGenerateToken(a, username, password)
-	if token == "" {
+	token, err := checkValidLoginAndGenerateToken(a, username, password)
+	if err != nil {
+		return "", err
+	} else if token == "" {
 		return "", nil
 	}
 	a.Tokens.Store(token, username)

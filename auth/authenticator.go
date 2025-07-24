@@ -3,28 +3,35 @@ package auth
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"net/http"
 	"sync"
-
-	"github.com/puzpuzpuz/xsync/v3"
 )
 
 // Authenticator is used by Octyne's Connector to provide HTTP API authentication.
 type Authenticator interface {
-	// GetUsers returns a Map with all the users and their corresponding passwords.
-	GetUsers() *xsync.MapOf[string, string]
-	// Validate is called on an HTTP API request and returns the username if request is authenticated.
+	// GetUser returns info about the user with the given username.
+	// Currently, it returns the password hash of the user.
+	//
+	// If the user does not exist, it returns ErrUserNotFound.
+	GetUser(username string) (string, error)
+	// Validate is called on an HTTP API request and returns the username if request is authenticated,
+	// else returns an empty string.
 	Validate(r *http.Request) (string, error)
 	// ValidateAndReject is called on an HTTP API request and returns the username if request
 	// is authenticated, else the request is rejected.
 	ValidateAndReject(w http.ResponseWriter, r *http.Request) string
 	// Login allows logging in a user and returning the token.
+	// It returns an empty string if the username or password are invalid.
 	Login(username string, password string) (string, error)
 	// Logout allows logging out of a user and deleting the token from the server.
 	Logout(token string) (bool, error)
 	// Close closes the authenticator. Once closed, the authenticator should not be used.
 	Close() error
 }
+
+// ErrUserNotFound is returned when a user was not found by the authenticator.
+var ErrUserNotFound = errors.New("no user with this username was found")
 
 // ReplaceableAuthenticator is an Authenticator implementation that allows replacing
 // the underlying Authenticator in a thread-safe manner on the fly.
@@ -33,14 +40,18 @@ type ReplaceableAuthenticator struct {
 	EngineMutex sync.RWMutex
 }
 
-// GetUsers returns a Map with all the users and their corresponding passwords.
-func (a *ReplaceableAuthenticator) GetUsers() *xsync.MapOf[string, string] {
+// GetUser returns info about the user with the given username.
+// Currently, it returns the password hash of the user.
+//
+// If the user does not exist, it returns ErrUserNotFound.
+func (a *ReplaceableAuthenticator) GetUser(username string) (string, error) {
 	a.EngineMutex.RLock()
 	defer a.EngineMutex.RUnlock()
-	return a.Engine.GetUsers()
+	return a.Engine.GetUser(username)
 }
 
-// Validate is called on an HTTP API request and returns the username if request is authenticated.
+// Validate is called on an HTTP API request and returns the username if request is authenticated,
+// else returns an empty string.
 func (a *ReplaceableAuthenticator) Validate(r *http.Request) (string, error) {
 	a.EngineMutex.RLock()
 	defer a.EngineMutex.RUnlock()
@@ -56,6 +67,7 @@ func (a *ReplaceableAuthenticator) ValidateAndReject(w http.ResponseWriter, r *h
 }
 
 // Login allows logging in a user and returning the token.
+// It returns an empty string if the username or password are invalid.
 func (a *ReplaceableAuthenticator) Login(username string, password string) (string, error) {
 	a.EngineMutex.RLock()
 	defer a.EngineMutex.RUnlock()
@@ -93,14 +105,18 @@ func isValidToken(token string) bool {
 	return err == nil && len(token) == 128
 }
 
-func checkValidLoginAndGenerateToken(auth Authenticator, username string, password string) string {
+func checkValidLoginAndGenerateToken(
+	auth Authenticator, username string, password string,
+) (string, error) {
 	// Check whether this user exists and if the password matches the saved hash.
-	hash, exists := auth.GetUsers().Load(username)
-	if !exists || !VerifyPasswordMatchesHash(password, hash) {
-		return ""
+	hash, err := auth.GetUser(username)
+	if err != nil && !errors.Is(err, ErrUserNotFound) {
+		return "", err
+	} else if err != nil || !VerifyPasswordMatchesHash(password, hash) {
+		return "", nil
 	}
 	// Generate a token and return it.
 	token := make([]byte, 96)
 	rand.Read(token) // Tolerate errors here, an error here is incredibly unlikely: skipcq GSC-G104
-	return base64.StdEncoding.EncodeToString(token)
+	return base64.StdEncoding.EncodeToString(token), nil
 }

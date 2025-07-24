@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -275,6 +276,7 @@ func consoleEndpoint(connector *Connector, w http.ResponseWriter, r *http.Reques
 		user, userErr = connector.Authenticator.Validate(r)
 	}
 	if !v2 && userErr != nil {
+		log.Println("An error occurred while validating authorization for an HTTP request!", userErr)
 		httpError(w, "Internal Server Error!", http.StatusInternalServerError)
 		return
 	} else if !v2 && user == "" {
@@ -337,9 +339,14 @@ func consoleEndpoint(connector *Connector, w http.ResponseWriter, r *http.Reques
 				} else if data == nil {
 					c.Close()
 					break
-				} else if _, ok := connector.Authenticator.GetUsers().Load(user); !ok && r.RemoteAddr != "@" {
-					c.Close()
-					break
+				} else if r.RemoteAddr != "@" {
+					if _, err := connector.Authenticator.GetUser(user); err != nil {
+						if !errors.Is(err, auth.ErrUserNotFound) {
+							log.Println("An error occurred while checking user in console endpoint!", err)
+						}
+						c.Close()
+						break
+					}
 				}
 				c.SetWriteDeadline(time.Now().Add(timeout)) // Set write deadline esp for v1 connections.
 				str, ok := data.(string)
@@ -375,10 +382,15 @@ func consoleEndpoint(connector *Connector, w http.ResponseWriter, r *http.Reques
 			if err != nil {
 				process.Clients.Delete(writeChannel)
 				break // The WebSocket connection has terminated.
-			} else if _, ok := connector.Authenticator.GetUsers().Load(user); !ok && r.RemoteAddr != "@" {
-				process.Clients.Delete(writeChannel)
-				c.Close()
-				break
+			} else if r.RemoteAddr != "@" {
+				if _, err := connector.Authenticator.GetUser(user); err != nil {
+					if !errors.Is(err, auth.ErrUserNotFound) {
+						log.Println("An error occurred while checking user in console endpoint!", err)
+					}
+					process.Clients.Delete(writeChannel)
+					c.Close()
+					break
+				}
 			}
 			if v2 {
 				c.SetReadDeadline(time.Now().Add(timeout)) // Update read deadline.
