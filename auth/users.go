@@ -24,7 +24,7 @@ func ValidateUsername(username string) string {
 	return ""
 }
 
-func CreateUserStore(usersJsonPath string) *xsync.MapOf[string, string] {
+func createUserStore(usersJsonPath string) (*xsync.MapOf[string, string], chan []byte) {
 	// Create default users.json file
 	_, err := os.Stat(usersJsonPath)
 	if os.IsNotExist(err) {
@@ -62,10 +62,10 @@ func CreateUserStore(usersJsonPath string) *xsync.MapOf[string, string] {
 	err = json.Unmarshal(initialFile, &usersJson)
 	if err != nil {
 		log.Println("An error occurred while parsing " + usersJsonPath + "! " + err.Error())
-		return users
+		return users, updates
 	}
 	updateUserStoreFromMap(users, usersJson)
-	return users
+	return users, updates
 }
 
 func updateUserStoreFromMap(users *xsync.MapOf[string, string], userMap map[string]string) error {

@@ -12,14 +12,15 @@ import (
 
 // RedisAuthenticator is an Authenticator implementation using Redis to store tokens.
 type RedisAuthenticator struct {
-	Users *xsync.MapOf[string, string]
-	Redis *redis.Pool
-	URL   string
+	Users       *xsync.MapOf[string, string]
+	userUpdates chan []byte
+	Redis       *redis.Pool
+	URL         string
 }
 
 // NewRedisAuthenticator initializes an authenticator using Redis for token storage.
 func NewRedisAuthenticator(usersJsonPath string, url string) *RedisAuthenticator {
-	users := CreateUserStore(usersJsonPath)
+	users, userUpdates := createUserStore(usersJsonPath)
 	pool := &redis.Pool{
 		Wait:      true,
 		MaxIdle:   5,
@@ -32,7 +33,7 @@ func NewRedisAuthenticator(usersJsonPath string, url string) *RedisAuthenticator
 			return conn, err
 		},
 	}
-	return &RedisAuthenticator{Redis: pool, URL: url, Users: users}
+	return &RedisAuthenticator{Redis: pool, URL: url, Users: users, userUpdates: userUpdates}
 }
 
 // GetUser returns info about the user with the given username.
@@ -125,5 +126,6 @@ func (a *RedisAuthenticator) Logout(token string) (bool, error) {
 
 // Close closes the authenticator. Once closed, the authenticator should not be used.
 func (a *RedisAuthenticator) Close() error {
+	close(a.userUpdates)
 	return a.Redis.Close()
 }

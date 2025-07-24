@@ -10,14 +10,19 @@ import (
 
 // MemoryAuthenticator is an Authenticator implementation using an array to store tokens.
 type MemoryAuthenticator struct {
-	Users  *xsync.MapOf[string, string]
-	Tokens *xsync.MapOf[string, string]
+	Users       *xsync.MapOf[string, string]
+	userUpdates chan []byte
+	Tokens      *xsync.MapOf[string, string]
 }
 
 // NewMemoryAuthenticator initializes an authenticator using memory for token storage.
 func NewMemoryAuthenticator(usersJsonPath string) *MemoryAuthenticator {
-	users := CreateUserStore(usersJsonPath)
-	return &MemoryAuthenticator{Tokens: xsync.NewMapOf[string, string](), Users: users}
+	users, userUpdates := createUserStore(usersJsonPath)
+	return &MemoryAuthenticator{
+		Users:       users,
+		userUpdates: userUpdates,
+		Tokens:      xsync.NewMapOf[string, string](),
+	}
 }
 
 // GetUser returns info about the user with the given username.
@@ -93,7 +98,8 @@ func (a *MemoryAuthenticator) Logout(token string) (bool, error) {
 	return tokenExisted, nil
 }
 
-// Close closes the authenticator. This is no-op for MemoryAuthenticator.
-func (*MemoryAuthenticator) Close() error {
+// Close closes the authenticator. Once closed, the authenticator should not be used.
+func (a *MemoryAuthenticator) Close() error {
+	close(a.userUpdates)
 	return nil
 }

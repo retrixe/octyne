@@ -9,7 +9,7 @@ import (
 
 // ReadAndWatchFile reads a file and returns its contents.
 // It also starts a goroutine that watches for changes to the file and sends updates on a channel.
-func ReadAndWatchFile(filePath string) ([]byte, <-chan []byte, error) {
+func ReadAndWatchFile(filePath string) ([]byte, chan []byte, error) {
 	file, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, nil, err
