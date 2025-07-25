@@ -8,12 +8,10 @@ import (
 	"time"
 
 	"github.com/gomodule/redigo/redis"
-	"github.com/puzpuzpuz/xsync/v3"
 )
 
 // RedisAuthenticator is an Authenticator implementation using Redis to store tokens.
 type RedisAuthenticator struct {
-	Users           *xsync.MapOf[string, string]
 	stopUserUpdates context.CancelFunc
 	Redis           *redis.Pool
 	URL             string
@@ -21,7 +19,6 @@ type RedisAuthenticator struct {
 
 // NewRedisAuthenticator initializes an authenticator using Redis for token storage.
 func NewRedisAuthenticator(usersJsonPath string, url string) *RedisAuthenticator {
-	users, stopUserUpdates := createUserStore(usersJsonPath)
 	pool := &redis.Pool{
 		Wait:      true,
 		MaxIdle:   5,
@@ -34,7 +31,44 @@ func NewRedisAuthenticator(usersJsonPath string, url string) *RedisAuthenticator
 			return conn, err
 		},
 	}
-	return &RedisAuthenticator{Redis: pool, URL: url, Users: users, stopUserUpdates: stopUserUpdates}
+	userUpdates, stopUserUpdates := readAndWatchUsers(usersJsonPath)
+	go (func() {
+		for {
+			newUsers, ok := <-userUpdates
+			if !ok {
+				return
+			}
+			(func() {
+				conn := pool.Get()
+				defer conn.Close()
+				// Get current users from Redis and remove them if they are not in the newUsers map
+				currentUsers, err := redis.Strings(conn.Do("KEYS", "octyne-user:*"))
+				if err != nil {
+					log.Println("An error occurred while fetching current users from Redis!", err)
+				}
+				for _, userKey := range currentUsers {
+					username := userKey[len("octyne-user:"):]
+					if _, exists := newUsers[username]; !exists {
+						if _, err := conn.Do("DEL", userKey); err != nil {
+							log.Println("An error occurred while deleting user '"+username+"' from Redis!", err)
+						}
+					}
+				}
+				// Upsert new users into Redis
+				for username, password := range newUsers {
+					if msg := ValidateUsername(username); msg == "" {
+						_, err := conn.Do("SET", "octyne-user:"+username, password)
+						if err != nil {
+							log.Println("An error occurred while updating user '"+username+"' in Redis!", err)
+						}
+					} else {
+						log.Println(msg + " This account will be ignored and eventually removed!")
+					}
+				}
+			})()
+		}
+	})()
+	return &RedisAuthenticator{Redis: pool, URL: url, stopUserUpdates: stopUserUpdates}
 }
 
 // GetUser returns info about the user with the given username.
@@ -42,9 +76,14 @@ func NewRedisAuthenticator(usersJsonPath string, url string) *RedisAuthenticator
 //
 // If the user does not exist, it returns ErrUserNotFound.
 func (a *RedisAuthenticator) GetUser(username string) (string, error) {
-	user, ok := a.Users.Load(username)
-	if !ok {
-		return "", ErrUserNotFound
+	conn := a.Redis.Get()
+	defer conn.Close()
+	user, err := redis.String(conn.Do("GET", "octyne-user:"+username))
+	if err != nil {
+		if errors.Is(err, redis.ErrNil) {
+			return "", ErrUserNotFound
+		}
+		return "", err
 	}
 	return user, nil
 }

@@ -9,7 +9,6 @@ import (
 	"os"
 	"regexp"
 
-	"github.com/puzpuzpuz/xsync/v3"
 	"github.com/retrixe/octyne/system"
 )
 
@@ -23,28 +22,6 @@ func ValidateUsername(username string) string {
 			" A valid username can contain only letters, numbers, _ or @."
 	}
 	return ""
-}
-
-func createUserStore(usersJsonPath string) (*xsync.MapOf[string, string], context.CancelFunc) {
-	userUpdates, cancel := readAndWatchUsers(usersJsonPath)
-	users := xsync.NewMapOf[string, string]()
-	go (func() {
-		for {
-			newUsers, ok := <-userUpdates
-			if !ok {
-				return
-			}
-			users.Clear() // Clear all pre-existing users
-			for username, password := range newUsers {
-				if msg := ValidateUsername(username); msg == "" {
-					users.Store(username, password)
-				} else {
-					log.Println(msg + " This account will be ignored and eventually removed!")
-				}
-			}
-		}
-	})()
-	return users, cancel
 }
 
 func readAndWatchUsers(usersJsonPath string) (<-chan map[string]string, context.CancelFunc) {
