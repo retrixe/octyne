@@ -69,10 +69,12 @@ func (a *MemoryAuthenticator) ValidateAndReject(w http.ResponseWriter, r *http.R
 		w.Header().Set("content-type", "application/json")
 		log.Println("An error occurred while validating authorization for an HTTP request!", err)
 		http.Error(w, "{\"error\": \"Internal Server Error!\"}", http.StatusInternalServerError)
+		return ""
 	} else if username == "" {
 		w.Header().Set("content-type", "application/json")
 		http.Error(w, "{\"error\": \"You are not authenticated to access this resource!\"}",
 			http.StatusUnauthorized)
+		return ""
 	}
 	return username
 }

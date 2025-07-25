@@ -45,6 +45,7 @@ func createUserStore(usersJsonPath string) (*xsync.MapOf[string, string], contex
 	users := xsync.NewMapOf[string, string]()
 	fileUpdates, cancel, err := system.ReadAndWatchFile(usersJsonPath)
 	if err != nil {
+		// skipcq RVV-A0003
 		// panic here, as this is critical for authenticator and we don't want to continue without it
 		log.Panicln("An error occurred while reading " + usersJsonPath + "! " + err.Error())
 	}
