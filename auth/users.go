@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
@@ -24,7 +25,7 @@ func ValidateUsername(username string) string {
 	return ""
 }
 
-func createUserStore(usersJsonPath string) (*xsync.MapOf[string, string], chan []byte) {
+func createUserStore(usersJsonPath string) (*xsync.MapOf[string, string], context.CancelFunc) {
 	// Create default users.json file
 	_, err := os.Stat(usersJsonPath)
 	if os.IsNotExist(err) {
@@ -42,13 +43,17 @@ func createUserStore(usersJsonPath string) (*xsync.MapOf[string, string], chan [
 	}
 
 	users := xsync.NewMapOf[string, string]()
-	initialFile, updates, err := system.ReadAndWatchFile(usersJsonPath)
+	fileUpdates, cancel, err := system.ReadAndWatchFile(usersJsonPath)
 	if err != nil {
+		// panic here, as this is critical for authenticator and we don't want to continue without it
 		log.Panicln("An error occurred while reading " + usersJsonPath + "! " + err.Error())
 	}
 	go (func() {
 		for {
-			newFile := <-updates
+			newFile, ok := <-fileUpdates
+			if !ok {
+				return
+			}
 			var usersJson map[string]string
 			err = json.Unmarshal(newFile, &usersJson)
 			if err != nil {
@@ -58,14 +63,7 @@ func createUserStore(usersJsonPath string) (*xsync.MapOf[string, string], chan [
 			updateUserStoreFromMap(users, usersJson)
 		}
 	})()
-	var usersJson map[string]string
-	err = json.Unmarshal(initialFile, &usersJson)
-	if err != nil {
-		log.Println("An error occurred while parsing " + usersJsonPath + "! " + err.Error())
-		return users, updates
-	}
-	updateUserStoreFromMap(users, usersJson)
-	return users, updates
+	return users, cancel
 }
 
 func updateUserStoreFromMap(users *xsync.MapOf[string, string], userMap map[string]string) error {

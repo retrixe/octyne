@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"errors"
 	"log"
 	"net/http"
@@ -12,15 +13,15 @@ import (
 
 // RedisAuthenticator is an Authenticator implementation using Redis to store tokens.
 type RedisAuthenticator struct {
-	Users       *xsync.MapOf[string, string]
-	userUpdates chan []byte
-	Redis       *redis.Pool
-	URL         string
+	Users           *xsync.MapOf[string, string]
+	stopUserUpdates context.CancelFunc
+	Redis           *redis.Pool
+	URL             string
 }
 
 // NewRedisAuthenticator initializes an authenticator using Redis for token storage.
 func NewRedisAuthenticator(usersJsonPath string, url string) *RedisAuthenticator {
-	users, userUpdates := createUserStore(usersJsonPath)
+	users, stopUserUpdates := createUserStore(usersJsonPath)
 	pool := &redis.Pool{
 		Wait:      true,
 		MaxIdle:   5,
@@ -33,7 +34,7 @@ func NewRedisAuthenticator(usersJsonPath string, url string) *RedisAuthenticator
 			return conn, err
 		},
 	}
-	return &RedisAuthenticator{Redis: pool, URL: url, Users: users, userUpdates: userUpdates}
+	return &RedisAuthenticator{Redis: pool, URL: url, Users: users, stopUserUpdates: stopUserUpdates}
 }
 
 // GetUser returns info about the user with the given username.
@@ -126,6 +127,6 @@ func (a *RedisAuthenticator) Logout(token string) (bool, error) {
 
 // Close closes the authenticator. Once closed, the authenticator should not be used.
 func (a *RedisAuthenticator) Close() error {
-	close(a.userUpdates)
+	a.stopUserUpdates()
 	return a.Redis.Close()
 }
