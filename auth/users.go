@@ -44,8 +44,8 @@ func readAndWatchUsers(usersJsonPath string) (<-chan map[string]string, context.
 	fileUpdates, cancel, err := system.ReadAndWatchFile(usersJsonPath)
 	if err != nil {
 		// skipcq RVV-A0003
-		// panic here, as this is critical for authenticator and we don't want to continue without it
-		log.Panicln("An error occurred while reading " + usersJsonPath + "! " + err.Error())
+		// this is critical for authenticator and we don't want to continue without it
+		log.Fatalln("An error occurred while reading " + usersJsonPath + "! " + err.Error())
 	}
 	userChannel := make(chan map[string]string, 1)
 	go (func() {

@@ -101,7 +101,7 @@ func InitializeConnector(config *Config) *Connector {
 	// Create an authenticator.
 	var authenticator auth.Authenticator
 	if config.Redis.Enabled {
-		authenticator = auth.NewRedisAuthenticator(UsersJsonPath, config.Redis.URL)
+		authenticator = auth.NewRedisAuthenticator(config.Redis.Role, UsersJsonPath, config.Redis.URL)
 	} else {
 		authenticator = auth.NewMemoryAuthenticator(UsersJsonPath)
 	}
@@ -280,7 +280,8 @@ func (connector *Connector) UpdateConfig(config *Config) {
 		(usingRedis && redisAuthenticator.URL != config.Redis.URL) {
 		replaceableAuthenticator.Engine.Close() // Bypassing ReplaceableAuthenticator mutex Lock.
 		if config.Redis.Enabled {
-			replaceableAuthenticator.Engine = auth.NewRedisAuthenticator(UsersJsonPath, config.Redis.URL)
+			replaceableAuthenticator.Engine =
+				auth.NewRedisAuthenticator(config.Redis.Role, UsersJsonPath, config.Redis.URL)
 		} else {
 			replaceableAuthenticator.Engine = auth.NewMemoryAuthenticator(UsersJsonPath)
 		}

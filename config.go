@@ -19,6 +19,7 @@ var defaultConfig = Config{
 	WebUI: WebUIConfig{
 		Enabled: true,
 	},
+	Redis:   RedisConfig{URL: "redis://localhost"},
 	Servers: map[string]ServerConfig{},
 }
 
@@ -59,6 +60,7 @@ type WebUIConfig struct {
 type RedisConfig struct {
 	Enabled bool   `json:"enabled"`
 	URL     string `json:"url"`
+	Role    string `json:"role"`
 }
 
 // HTTPSConfig contains whether or not HTTPS is enabled, and if so, path to cert and key.

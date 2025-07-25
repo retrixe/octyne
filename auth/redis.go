@@ -18,7 +18,7 @@ type RedisAuthenticator struct {
 }
 
 // NewRedisAuthenticator initializes an authenticator using Redis for token storage.
-func NewRedisAuthenticator(usersJsonPath string, url string) *RedisAuthenticator {
+func NewRedisAuthenticator(role string, usersJsonPath string, url string) *RedisAuthenticator {
 	pool := &redis.Pool{
 		Wait:      true,
 		MaxIdle:   5,
@@ -31,43 +31,53 @@ func NewRedisAuthenticator(usersJsonPath string, url string) *RedisAuthenticator
 			return conn, err
 		},
 	}
-	userUpdates, stopUserUpdates := readAndWatchUsers(usersJsonPath)
-	go (func() {
-		for {
-			newUsers, ok := <-userUpdates
-			if !ok {
-				return
+	var stopUserUpdates context.CancelFunc = nil
+	if role == "secondary" {
+		log.Println("Note: Redis authentication is configured in a secondary role. " +
+			"A primary node is required to perform user management and authentication.")
+	} else if role == "primary" {
+		userUpdates, cancel := readAndWatchUsers(usersJsonPath)
+		stopUserUpdates = cancel
+		go (func() {
+			for {
+				newUsers, ok := <-userUpdates
+				if !ok {
+					return
+				}
+				(func() {
+					conn := pool.Get()
+					defer conn.Close()
+					// Get current users from Redis and remove them if they are not in the newUsers map
+					currentUsers, err := redis.Strings(conn.Do("KEYS", "octyne-user:*"))
+					if err != nil {
+						log.Println("An error occurred while fetching current users from Redis!", err)
+					}
+					for _, userKey := range currentUsers {
+						username := userKey[len("octyne-user:"):]
+						if _, exists := newUsers[username]; !exists {
+							if _, err := conn.Do("DEL", userKey); err != nil {
+								log.Println("An error occurred while deleting user '"+username+"' from Redis!", err)
+							}
+						}
+					}
+					// Upsert new users into Redis
+					for username, password := range newUsers {
+						if msg := ValidateUsername(username); msg == "" {
+							_, err := conn.Do("SET", "octyne-user:"+username, password)
+							if err != nil {
+								log.Println("An error occurred while updating user '"+username+"' in Redis!", err)
+							}
+						} else {
+							log.Println(msg + " This account will be ignored and eventually removed!")
+						}
+					}
+				})()
 			}
-			(func() {
-				conn := pool.Get()
-				defer conn.Close()
-				// Get current users from Redis and remove them if they are not in the newUsers map
-				currentUsers, err := redis.Strings(conn.Do("KEYS", "octyne-user:*"))
-				if err != nil {
-					log.Println("An error occurred while fetching current users from Redis!", err)
-				}
-				for _, userKey := range currentUsers {
-					username := userKey[len("octyne-user:"):]
-					if _, exists := newUsers[username]; !exists {
-						if _, err := conn.Do("DEL", userKey); err != nil {
-							log.Println("An error occurred while deleting user '"+username+"' from Redis!", err)
-						}
-					}
-				}
-				// Upsert new users into Redis
-				for username, password := range newUsers {
-					if msg := ValidateUsername(username); msg == "" {
-						_, err := conn.Do("SET", "octyne-user:"+username, password)
-						if err != nil {
-							log.Println("An error occurred while updating user '"+username+"' in Redis!", err)
-						}
-					} else {
-						log.Println(msg + " This account will be ignored and eventually removed!")
-					}
-				}
-			})()
-		}
-	})()
+		})()
+	} else {
+		// skipcq RVV-A0003
+		log.Fatalln("Invalid Redis role specified in config! Must be either 'primary' or 'secondary'.")
+	}
 	return &RedisAuthenticator{Redis: pool, URL: url, stopUserUpdates: stopUserUpdates}
 }
 
@@ -168,6 +178,8 @@ func (a *RedisAuthenticator) Logout(token string) (bool, error) {
 
 // Close closes the authenticator. Once closed, the authenticator should not be used.
 func (a *RedisAuthenticator) Close() error {
-	a.stopUserUpdates()
+	if a.stopUserUpdates != nil {
+		a.stopUserUpdates()
+	}
 	return a.Redis.Close()
 }

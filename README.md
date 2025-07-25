@@ -106,8 +106,13 @@ Example `config.json` file:
     "group": "" // optional, sets the socket's group owner, if absent, default is current user's primary group
   },
   "redis": {
-    "enabled": false, // whether the authentication tokens should sync to Redis for more than 1 node
-    "url": "redis://localhost" // link to Redis server
+    // whether Octyne should use Redis for authentication, mainly useful for multi-node setups
+    // to show them in the same Web UI and share user accounts/login sessions.
+    // Redis will also persist login sessions across restarts.
+    "enabled": false,
+    "url": "redis://localhost", // link to Redis server
+    "role": "primary" // role of this node, primary or secondary
+    // note: there should be 1 primary node to manage/authenticate users in a multi-node setup!
   },
   "https": {
     "enabled": false, // whether Octyne should listen using HTTP or HTTPS
