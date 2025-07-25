@@ -97,7 +97,7 @@ func (a *MemoryAuthenticator) ValidateAndReject(w http.ResponseWriter, r *http.R
 }
 
 // CanManageAuth returns whether or not this authenticator can manage auth, i.e. users and tokens.
-func (a *MemoryAuthenticator) CanManageAuth() bool {
+func (*MemoryAuthenticator) CanManageAuth() bool {
 	return true
 }
 

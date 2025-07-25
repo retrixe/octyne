@@ -47,7 +47,9 @@ RestartSec=1
 # Replace `abcxyz` with your Linux account username.
 User=abcxyz
 WorkingDirectory=/home/abcxyz/octyne/
-ExecStart=/home/abcxyz/octyne/octyne
+# Install Octyne to /usr/local/bin/ to avoid issues with SELinux on Red Hat-based distros.
+# If using SELinux, run `sudo restorecon /usr/local/bin/octyne` after moving the binary.
+ExecStart=/usr/local/bin/octyne
 
 [Install]
 WantedBy=multi-user.target
