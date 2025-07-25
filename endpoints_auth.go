@@ -22,6 +22,10 @@ func loginEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request)
 	if r.RemoteAddr == "@" {
 		httpError(w, "Auth endpoints cannot be called over Unix socket!", http.StatusBadRequest)
 		return
+	} else if !connector.Authenticator.CanManageAuth() {
+		httpError(w, "This node does not support authentication. Authenticate with the primary node!",
+			http.StatusForbidden)
+		return
 	}
 	// In case the username and password headers don't exist.
 	username := r.Header.Get("Username")
@@ -64,6 +68,10 @@ func loginEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request)
 func logoutEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request) {
 	if r.RemoteAddr == "@" {
 		httpError(w, "Auth endpoints cannot be called over Unix socket!", http.StatusBadRequest)
+		return
+	} else if !connector.Authenticator.CanManageAuth() {
+		httpError(w, "This node does not support authentication. Authenticate with the primary node!",
+			http.StatusForbidden)
 		return
 	}
 	// Check with authenticator.
@@ -137,6 +145,11 @@ type accountsRequestBody struct {
 }
 
 func accountsEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request) {
+	if !connector.Authenticator.CanManageAuth() {
+		httpError(w, "This node does not support managing users. "+
+			"Perform user management on the primary node!", http.StatusForbidden)
+		return
+	}
 	user := connector.ValidateAndReject(w, r)
 	if user == "" {
 		return

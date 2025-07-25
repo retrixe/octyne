@@ -96,6 +96,11 @@ func (a *MemoryAuthenticator) ValidateAndReject(w http.ResponseWriter, r *http.R
 	return username
 }
 
+// CanManageAuth returns whether or not this authenticator can manage auth, i.e. users and tokens.
+func (a *MemoryAuthenticator) CanManageAuth() bool {
+	return true
+}
+
 // Login allows logging in a user and returning the token.
 // It returns an empty string if the username or password are invalid.
 func (a *MemoryAuthenticator) Login(username string, password string) (string, error) {

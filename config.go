@@ -19,7 +19,7 @@ var defaultConfig = Config{
 	WebUI: WebUIConfig{
 		Enabled: true,
 	},
-	Redis:   RedisConfig{URL: "redis://localhost"},
+	Redis:   RedisConfig{URL: "redis://localhost", Role: "primary"}, // TODO: Remove default in 2.0
 	Servers: map[string]ServerConfig{},
 }
 

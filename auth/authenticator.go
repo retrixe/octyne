@@ -21,6 +21,8 @@ type Authenticator interface {
 	// ValidateAndReject is called on an HTTP API request and returns the username if request
 	// is authenticated, else the request is rejected.
 	ValidateAndReject(w http.ResponseWriter, r *http.Request) string
+	// CanManageAuth returns whether or not this authenticator can manage auth, i.e. users and tokens.
+	CanManageAuth() bool
 	// Login allows logging in a user and returning the token.
 	// It returns an empty string if the username or password are invalid.
 	Login(username string, password string) (string, error)
@@ -64,6 +66,13 @@ func (a *ReplaceableAuthenticator) ValidateAndReject(w http.ResponseWriter, r *h
 	a.EngineMutex.RLock()
 	defer a.EngineMutex.RUnlock()
 	return a.Engine.ValidateAndReject(w, r)
+}
+
+// CanManageAuth returns whether or not this authenticator can manage auth, i.e. users and tokens.
+func (a *ReplaceableAuthenticator) CanManageAuth() bool {
+	a.EngineMutex.RLock()
+	defer a.EngineMutex.RUnlock()
+	return a.Engine.CanManageAuth()
 }
 
 // Login allows logging in a user and returning the token.

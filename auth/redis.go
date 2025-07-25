@@ -144,6 +144,11 @@ func (a *RedisAuthenticator) ValidateAndReject(w http.ResponseWriter, r *http.Re
 	return username
 }
 
+// CanManageAuth returns whether or not this authenticator can manage auth, i.e. users and tokens.
+func (a *RedisAuthenticator) CanManageAuth() bool {
+	return a.stopUserUpdates != nil
+}
+
 // Login allows logging in a user and returning the token.
 // It returns an empty string if the username or password are invalid.
 func (a *RedisAuthenticator) Login(username string, password string) (string, error) {
