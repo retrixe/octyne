@@ -26,6 +26,28 @@ func ValidateUsername(username string) string {
 }
 
 func createUserStore(usersJsonPath string) (*xsync.MapOf[string, string], context.CancelFunc) {
+	userUpdates, cancel := readAndWatchUsers(usersJsonPath)
+	users := xsync.NewMapOf[string, string]()
+	go (func() {
+		for {
+			newUsers, ok := <-userUpdates
+			if !ok {
+				return
+			}
+			users.Clear() // Clear all pre-existing users
+			for username, password := range newUsers {
+				if msg := ValidateUsername(username); msg == "" {
+					users.Store(username, password)
+				} else {
+					log.Println(msg + " This account will be ignored and eventually removed!")
+				}
+			}
+		}
+	})()
+	return users, cancel
+}
+
+func readAndWatchUsers(usersJsonPath string) (<-chan map[string]string, context.CancelFunc) {
 	// Create default users.json file
 	_, err := os.Stat(usersJsonPath)
 	if os.IsNotExist(err) {
@@ -42,13 +64,13 @@ func createUserStore(usersJsonPath string) (*xsync.MapOf[string, string], contex
 		}
 	}
 
-	users := xsync.NewMapOf[string, string]()
 	fileUpdates, cancel, err := system.ReadAndWatchFile(usersJsonPath)
 	if err != nil {
 		// skipcq RVV-A0003
 		// panic here, as this is critical for authenticator and we don't want to continue without it
 		log.Panicln("An error occurred while reading " + usersJsonPath + "! " + err.Error())
 	}
+	userChannel := make(chan map[string]string, 1)
 	go (func() {
 		for {
 			newFile, ok := <-fileUpdates
@@ -61,20 +83,8 @@ func createUserStore(usersJsonPath string) (*xsync.MapOf[string, string], contex
 				log.Println("An error occurred while parsing " + usersJsonPath + "! " + err.Error())
 				continue
 			}
-			updateUserStoreFromMap(users, usersJson)
+			userChannel <- usersJson
 		}
 	})()
-	return users, cancel
-}
-
-func updateUserStoreFromMap(users *xsync.MapOf[string, string], userMap map[string]string) error {
-	users.Clear() // Clear all pre-existing users
-	for username, password := range userMap {
-		if msg := ValidateUsername(username); msg == "" {
-			users.Store(username, password)
-		} else {
-			log.Println(msg + " This account will be ignored and eventually removed!")
-		}
-	}
-	return nil
+	return userChannel, cancel
 }
