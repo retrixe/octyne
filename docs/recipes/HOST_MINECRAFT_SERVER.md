@@ -78,7 +78,7 @@ cd ~/octyne
 
 You will receive the message that an `admin` user has been generated, along with its password. Make sure to note down this password, you can change it once you log into the Octyne web dashboard.
 
-Open the Octyne web dashboard at `http://<your server's IP>:42069` in your browser, log in, and you should see the Minecraft server at `mcserver`! (If running locally, use `http://localhost:42069`.)
+Open the Octyne web dashboard at `http://<your server's IP>:7877` in your browser, log in, and you should see the Minecraft server at `mcserver`! (If running locally, use `http://localhost:7877`.)
 
 You may notice that the Minecraft server is not running yet, due to the Minecraft EULA not being accepted. To accept the EULA, after clicking on the `mcserver` server, edit `eula.txt` in the `Files` tab and change the line `eula=false` to `eula=true`. Now, you can start the server by clicking the `Start` button in the `Console` tab.
 

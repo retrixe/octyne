@@ -117,8 +117,18 @@ func InitializeConnector(config *Config) *Connector {
 		Processes:     xsync.NewMapOf[string, *ExposedProcess](),
 		Tickets:       xsync.NewMapOf[string, Ticket](),
 		Authenticator: &auth.ReplaceableAuthenticator{Engine: authenticator},
-		Upgrader:      &websocket.Upgrader{Subprotocols: []string{"console-v2"}},
+		Upgrader: &websocket.Upgrader{
+			Subprotocols: []string{"console-v2"},
+			CheckOrigin: func(_ *http.Request) bool {
+				return true
+			},
+		},
 	}
+	return connector
+}
+
+// GetMux returns a new HTTP request multiplexer for the connector.
+func (connector *Connector) GetMux(webUi bool) *http.ServeMux {
 	// Initialize all routes for the connector.
 	/*
 		All routes:
@@ -154,33 +164,33 @@ func InitializeConnector(config *Config) *Connector {
 	*/
 
 	prefix := ""
+	mux := http.NewServeMux()
 
 	// WebUI
-	if config.WebUI.Enabled {
+	if webUi {
 		prefix = "/api"
-		http.Handle("/", http.FileServer(ecthelionFileSystem{http.FS(Ecthelion)}))
+		mux.Handle("/", http.FileServer(ecthelionFileSystem{http.FS(Ecthelion)}))
 	}
 
-	http.Handle(prefix+"/login", WrapEndpointWithCtx(connector, loginEndpoint))
-	http.Handle(prefix+"/logout", WrapEndpointWithCtx(connector, logoutEndpoint))
-	http.Handle(prefix+"/ott", WrapEndpointWithCtx(connector, ottEndpoint))
-	http.Handle(prefix+"/accounts", WrapEndpointWithCtx(connector, accountsEndpoint))
+	mux.Handle(prefix+"/login", WrapEndpointWithCtx(connector, loginEndpoint))
+	mux.Handle(prefix+"/logout", WrapEndpointWithCtx(connector, logoutEndpoint))
+	mux.Handle(prefix+"/ott", WrapEndpointWithCtx(connector, ottEndpoint))
+	mux.Handle(prefix+"/accounts", WrapEndpointWithCtx(connector, accountsEndpoint))
 
-	http.HandleFunc(prefix+"/", rootEndpoint)
-	http.Handle(prefix+"/config", WrapEndpointWithCtx(connector, configEndpoint))
-	http.Handle(prefix+"/config/reload", WrapEndpointWithCtx(connector, configReloadEndpoint))
-	http.Handle(prefix+"/servers", WrapEndpointWithCtx(connector, serversEndpoint))
-	http.Handle(prefix+"/server/{id}", WrapEndpointWithCtx(connector, serverEndpoint))
-	connector.Upgrader.CheckOrigin = func(_ *http.Request) bool { return true }
-	http.Handle(prefix+"/server/{id}/console", WrapEndpointWithCtx(connector, consoleEndpoint))
+	mux.HandleFunc(prefix+"/", rootEndpoint)
+	mux.Handle(prefix+"/config", WrapEndpointWithCtx(connector, configEndpoint))
+	mux.Handle(prefix+"/config/reload", WrapEndpointWithCtx(connector, configReloadEndpoint))
+	mux.Handle(prefix+"/servers", WrapEndpointWithCtx(connector, serversEndpoint))
+	mux.Handle(prefix+"/server/{id}", WrapEndpointWithCtx(connector, serverEndpoint))
+	mux.Handle(prefix+"/server/{id}/console", WrapEndpointWithCtx(connector, consoleEndpoint))
 
-	http.Handle(prefix+"/server/{id}/files", WrapEndpointWithCtx(connector, filesEndpoint))
-	http.Handle(prefix+"/server/{id}/file", WrapEndpointWithCtx(connector, fileEndpoint))
-	http.Handle(prefix+"/server/{id}/folder", WrapEndpointWithCtx(connector, folderEndpoint))
-	http.Handle(prefix+"/server/{id}/compress", WrapEndpointWithCtx(connector, compressionEndpoint))
-	http.Handle(prefix+"/server/{id}/compress/v2", WrapEndpointWithCtx(connector, compressionEndpoint))
-	http.Handle(prefix+"/server/{id}/decompress", WrapEndpointWithCtx(connector, decompressionEndpoint))
-	return connector
+	mux.Handle(prefix+"/server/{id}/files", WrapEndpointWithCtx(connector, filesEndpoint))
+	mux.Handle(prefix+"/server/{id}/file", WrapEndpointWithCtx(connector, fileEndpoint))
+	mux.Handle(prefix+"/server/{id}/folder", WrapEndpointWithCtx(connector, folderEndpoint))
+	mux.Handle(prefix+"/server/{id}/compress", WrapEndpointWithCtx(connector, compressionEndpoint))
+	mux.Handle(prefix+"/server/{id}/compress/v2", WrapEndpointWithCtx(connector, compressionEndpoint))
+	mux.Handle(prefix+"/server/{id}/decompress", WrapEndpointWithCtx(connector, decompressionEndpoint))
+	return mux
 }
 
 // AddProcess adds a process to the connector to be accessed via the HTTP API.

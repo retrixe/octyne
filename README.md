@@ -20,7 +20,7 @@ Contributions to add more recipes are welcome!
 - Place octyne in a folder (on Linux/macOS/\*nix, mark as executable with `chmod +x <octyne file name>`).
 - Create a `config.json` next to Octyne (see [the configuration section](https://github.com/retrixe/octyne#configuration) for details).
 - Run `./<octyne file name>` in a terminal in the folder to start Octyne. An `admin` user will be generated for you.
-- You can now access the Octyne web dashboard at `http://<your server's IP>:42069`!
+- You can now access the Octyne web dashboard at `http://<your server's IP>:7877` and the API at `http://<your server's IP>:42069`!
 - Install [octynectl](https://github.com/retrixe/octynectl) to manage Octyne from the terminal. [Additionally, make sure to setup HTTPS!](https://github.com/retrixe/octyne#https-setup)
 
 You might want to use `systemd` on Linux to start/stop Octyne automatically for you.
@@ -97,10 +97,8 @@ Example `config.json` file:
 {
   "port": 42069, // optional, default is 42069
   "webUI": {
-    // optional, default true, whether the Octyne Web UI should be enabled
-    // NOTE: if enabled, the API endpoints will move to /api
-    //       and the web UI will be available at /
-    "enabled": true,
+    "enabled": true, // optional, default true, whether the Octyne Web UI should be enabled
+    "port": 7877 // optional, default is 7877, the port on which the Web UI listens
   },
   "unixSocket": {
     "enabled": true, // enables Unix socket API for auth-less actions by locally running apps e.g. octynectl
@@ -175,14 +173,15 @@ Sample configs for nginx and Apache are provided below too. You must setup HTTPS
 
 ### Sample Caddy Setup
 
-Simply run `caddy reverse-proxy --from :42069 --to :8000` to setup Octyne with HTTPS on port 8000! For more advanced setups e.g. combining Octyne with standalone Ecthelion, [read the Caddy documentation.](https://caddyserver.com/docs/quick-starts/reverse-proxy)
+Simply run `caddy reverse-proxy --from :7877 --to :8000` to setup the Octyne Web UI with HTTPS on port 8000! For more advanced setups e.g. combining Octyne with standalone Ecthelion, [read the Caddy documentation.](https://caddyserver.com/docs/quick-starts/reverse-proxy)
 
 ### Sample nginx Config
 
 ```nginx
 location /octyne {
     rewrite /octyne/(.*) /$1 break;
-    proxy_pass http://127.0.0.1:42069;
+    # Use 7877 for Web UI or 42069 for API, you typically want the Web UI unless using Ecthelion standalone
+    proxy_pass http://127.0.0.1:7877;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     # Adjust this as necessary for file uploads:
     client_max_body_size 1024M;
@@ -208,9 +207,10 @@ Note: Ensure `mod_proxy` is loaded.
 <VirtualHost *:443>
   # Octyne
   Protocols h2 h2c http/1.1
-  ProxyPassMatch ^/octyne/(server/.*/console)$  ws://127.0.0.1:42069/$1
-  ProxyPass /octyne http://127.0.0.1:42069
-  ProxyPassReverse /octyne http://127.0.0.1:42069
+  # Use 7877 for Web UI or 42069 for API, you typically want the Web UI unless using Ecthelion standalone
+  ProxyPassMatch ^/octyne/(server/.*/console)$  ws://127.0.0.1:7877/$1
+  ProxyPass /octyne http://127.0.0.1:7877
+  ProxyPassReverse /octyne http://127.0.0.1:7877
 
   # Ecthelion (this section is needed ONLY if using standalone Ecthelion)
   # Remember to set the basePath in Ecthelion's config.json to /console (or whatever you pick)!

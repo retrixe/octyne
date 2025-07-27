@@ -26,11 +26,11 @@ const OctyneVersion = "1.3.0"
 //go:embed all:ecthelion/out/*
 var Ecthelion embed.FS
 
-func getPort(config *Config) string {
-	if config.Port == 0 {
-		return ":42069"
+func portToString(port uint16, defaultPort uint16) string {
+	if port == 0 {
+		return ":" + strconv.Itoa(int(defaultPort))
 	}
-	return ":" + strconv.Itoa(int(config.Port))
+	return ":" + strconv.Itoa(int(port))
 }
 
 var info *log.Logger
@@ -90,38 +90,63 @@ func main() {
 	}
 
 	// Listen.
-	port := getPort(&config)
-	info.Println("Listening to port " + port[1:])
+	apiPort := portToString(config.Port, defaultConfig.Port)
+	webUiPort := portToString(config.WebUI.Port, defaultConfig.WebUI.Port)
+	info.Println("Listening for API requests on port " + apiPort[1:])
 	connector.Logger.Zap.Infow("started octyne", "port", config.Port)
-	handler := handlers.CORS(
-		handlers.AllowedHeaders([]string{
-			"X-Requested-With", "Content-Type", "Authorization", "Username", "Password",
-		}),
-		handlers.AllowedMethods([]string{"GET", "POST", "PUT", "HEAD", "OPTIONS", "PATCH", "DELETE"}),
-		handlers.AllowedOrigins([]string{"*"}),
-	)(http.DefaultServeMux)
-	server := &http.Server{
-		Addr:              port,
-		Handler:           handler,
+	allowedHeaders := handlers.AllowedHeaders([]string{
+		"X-Requested-With", "Content-Type", "Authorization", "Username", "Password",
+	})
+	allowedMethods := handlers.AllowedMethods([]string{
+		"GET", "POST", "PUT", "HEAD", "OPTIONS", "PATCH", "DELETE",
+	})
+	allowedOrigins := handlers.AllowedOrigins([]string{"*"})
+	apiHandler := handlers.CORS(allowedHeaders, allowedMethods, allowedOrigins)(connector.GetMux(false))
+	webUiHandler := handlers.CORS(allowedHeaders, allowedMethods, allowedOrigins)(connector.GetMux(true))
+	apiServer := &http.Server{
+		Addr:              apiPort,
+		Handler:           apiHandler,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	webUiServer := &http.Server{
+		Addr:              webUiPort,
+		Handler:           webUiHandler,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
-	// Begin listening on TCP and Unix socket, then begin serving HTTP requests.
-	tcpListener, err := net.Listen("tcp", port)
+	// Begin listening on API port and Unix socket, then begin serving HTTP requests.
+	apiListener, err := net.Listen("tcp", apiPort)
 	if err != nil {
-		log.Println("Error when listening on port "+port+"!", err)
+		log.Println("Error when listening on port "+apiPort+"!", err)
 		return
 	}
 	if config.UnixSocket.Enabled {
-		unixListener, err := ListenOnUnixSocket(port, config)
+		unixListener, err := listenOnUnixSocket(apiPort, config)
 		if err != nil {
 			return
 		}
 		go (func() {
-			defer server.Close() // Close the TCP server if the Unix socket server fails.
-			err = server.Serve(unixListener)
+			defer apiServer.Close()   // Close the API/Unix socket servers on failure.
+			defer webUiServer.Close() // Close the Web UI server on failure.
+			err = apiServer.Serve(unixListener)
 			if err != nil && err != http.ErrServerClosed {
 				log.Println("Error when serving Unix socket requests!", err)
+			}
+		})()
+	}
+	if config.WebUI.Enabled {
+		webUiListener, err := net.Listen("tcp", webUiPort)
+		if err != nil {
+			log.Println("Error when listening on port "+webUiPort+"!", err)
+			return
+		}
+		info.Println("Listening for Web UI requests on port " + webUiPort[1:])
+		go (func() {
+			defer apiServer.Close()   // Close the API/Unix socket servers on failure.
+			defer webUiServer.Close() // Close the Web UI server on failure.
+			err = webUiServer.Serve(webUiListener)
+			if err != nil && err != http.ErrServerClosed {
+				log.Println("Error when serving Web UI requests!", err)
 			}
 		})()
 	}
@@ -133,21 +158,22 @@ func main() {
 		sig := <-c
 		log.Printf("Caught signal %s: shutting down.", sig)
 		exitCode = 0
-		server.Close() // Close both servers, then call the defers in main()
+		apiServer.Close() // Close both servers, then call the defers in main()
 	}(sigc)
 
-	defer server.Close() // Close the Unix socket server if the TCP server fails.
+	defer apiServer.Close()   // Close the API/Unix socket servers on failure.
+	defer webUiServer.Close() // Close the Web UI server on failure.
 	if !config.HTTPS.Enabled {
-		err = server.Serve(tcpListener)
+		err = apiServer.Serve(apiListener)
 	} else {
-		err = server.ServeTLS(tcpListener, config.HTTPS.Cert, config.HTTPS.Key)
+		err = apiServer.ServeTLS(apiListener, config.HTTPS.Cert, config.HTTPS.Key)
 	}
 	if err != nil && err != http.ErrServerClosed {
 		log.Println("Error when serving HTTP requests!", err) // skipcq: GO-S0904
 	}
 }
 
-func ListenOnUnixSocket(port string, config Config) (net.Listener, error) {
+func listenOnUnixSocket(port string, config Config) (net.Listener, error) {
 	loc := filepath.Join(os.TempDir(), "octyne.sock."+port[1:])
 	if config.UnixSocket.Location != "" {
 		loc = config.UnixSocket.Location
@@ -183,5 +209,6 @@ func ListenOnUnixSocket(port string, config Config) (net.Listener, error) {
 			return nil, err
 		}
 	}
+	info.Println("Listening on Unix socket at " + loc)
 	return unixListener, nil
 }

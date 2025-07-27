@@ -16,7 +16,7 @@ if (Test-Path $CONFIG_FILE) {
 # Write new config contents
 $configContent = @"
 {
-  "ip": "http://localhost:42069/api",
+  "ip": "/api",
   "enableCookieAuth": true
 }
 "@

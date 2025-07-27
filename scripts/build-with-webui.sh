@@ -14,7 +14,7 @@ fi
 # Write new config contents
 cat > "$CONFIG_FILE" <<EOL
 {
-  "ip": "http://localhost:42069/api",
+  "ip": "/api",
   "enableCookieAuth": true
 }
 EOL

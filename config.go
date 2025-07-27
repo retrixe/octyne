@@ -18,6 +18,7 @@ var defaultConfig = Config{
 	},
 	WebUI: WebUIConfig{
 		Enabled: true,
+		Port:    7877,
 	},
 	Redis:   RedisConfig{URL: "redis://localhost", Role: "primary"}, // TODO: Remove default in 2.0
 	Servers: map[string]ServerConfig{},
@@ -53,7 +54,8 @@ type Config struct {
 
 // WebUIConfig contains whether or not the Web UI is enabled.
 type WebUIConfig struct {
-	Enabled bool `json:"enabled"`
+	Enabled bool   `json:"enabled"`
+	Port    uint16 `json:"port"`
 }
 
 // RedisConfig contains whether or not Redis is enabled, and if so, how to connect.
