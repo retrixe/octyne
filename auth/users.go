@@ -24,7 +24,7 @@ func ValidateUsername(username string) string {
 	return ""
 }
 
-func readAndWatchUsers(usersJsonPath string) (<-chan map[string]string, context.CancelFunc) {
+func readAndWatchUsers(usersJsonPath string) (<-chan map[string]string, context.CancelFunc, error) {
 	// Create default users.json file
 	_, err := os.Stat(usersJsonPath)
 	if os.IsNotExist(err) {
@@ -43,9 +43,7 @@ func readAndWatchUsers(usersJsonPath string) (<-chan map[string]string, context.
 
 	fileUpdates, cancel, err := system.ReadAndWatchFile(usersJsonPath)
 	if err != nil {
-		// skipcq RVV-A0003
-		// this is critical for authenticator and we don't want to continue without it
-		log.Fatalln("An error occurred while reading " + usersJsonPath + "! " + err.Error())
+		return nil, nil, err
 	}
 	userChannel := make(chan map[string]string, 1)
 	go (func() {
@@ -63,5 +61,5 @@ func readAndWatchUsers(usersJsonPath string) (<-chan map[string]string, context.
 			userChannel <- usersJson
 		}
 	})()
-	return userChannel, cancel
+	return userChannel, cancel, nil
 }

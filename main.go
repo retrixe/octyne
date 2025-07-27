@@ -55,7 +55,8 @@ func main() {
 	// Read config.
 	config, err := ReadConfig()
 	if err != nil {
-		panic("An error occurred while attempting to read config! " + err.Error())
+		println("An error occurred while attempting to read config! " + err.Error())
+		os.Exit(1)
 	}
 
 	// Setup logging.

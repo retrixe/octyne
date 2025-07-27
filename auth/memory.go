@@ -17,8 +17,11 @@ type MemoryAuthenticator struct {
 }
 
 // NewMemoryAuthenticator initializes an authenticator using memory for token storage.
-func NewMemoryAuthenticator(usersJsonPath string) *MemoryAuthenticator {
-	userUpdates, stopUserUpdates := readAndWatchUsers(usersJsonPath)
+func NewMemoryAuthenticator(usersJsonPath string) (*MemoryAuthenticator, error) {
+	userUpdates, stopUserUpdates, err := readAndWatchUsers(usersJsonPath)
+	if err != nil {
+		return nil, err
+	}
 	users := xsync.NewMapOf[string, string]()
 	go (func() {
 		for {
@@ -40,7 +43,7 @@ func NewMemoryAuthenticator(usersJsonPath string) *MemoryAuthenticator {
 		Users:           users,
 		stopUserUpdates: stopUserUpdates,
 		Tokens:          xsync.NewMapOf[string, string](),
-	}
+	}, nil
 }
 
 // GetUser returns info about the user with the given username.

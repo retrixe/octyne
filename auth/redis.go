@@ -15,10 +15,13 @@ type RedisAuthenticator struct {
 	stopUserUpdates context.CancelFunc
 	Redis           *redis.Pool
 	URL             string
+	Role            string
 }
 
 // NewRedisAuthenticator initializes an authenticator using Redis for token storage.
-func NewRedisAuthenticator(role string, usersJsonPath string, url string) *RedisAuthenticator {
+func NewRedisAuthenticator(
+	role string, usersJsonPath string, url string,
+) (*RedisAuthenticator, error) {
 	pool := &redis.Pool{
 		Wait:      true,
 		MaxIdle:   5,
@@ -32,11 +35,12 @@ func NewRedisAuthenticator(role string, usersJsonPath string, url string) *Redis
 		},
 	}
 	var stopUserUpdates context.CancelFunc = nil
-	if role == "secondary" {
-		log.Println("Note: Redis authentication is configured in a secondary role. " +
-			"A primary node is required to perform user management and authentication.")
-	} else if role == "primary" {
-		userUpdates, cancel := readAndWatchUsers(usersJsonPath)
+	switch role {
+	case "primary":
+		userUpdates, cancel, err := readAndWatchUsers(usersJsonPath)
+		if err != nil {
+			return nil, err
+		}
 		stopUserUpdates = cancel
 		go (func() {
 			for {
@@ -74,11 +78,18 @@ func NewRedisAuthenticator(role string, usersJsonPath string, url string) *Redis
 				})()
 			}
 		})()
-	} else {
-		// skipcq RVV-A0003
-		log.Fatalln("Invalid Redis role specified in config! Must be either 'primary' or 'secondary'.")
+	case "secondary":
+		log.Println("Note: Redis authentication is configured in a secondary role. " +
+			"A primary node is required to perform user management and authentication.")
+	default:
+		return nil, errors.New("invalid Redis role: " + role)
 	}
-	return &RedisAuthenticator{Redis: pool, URL: url, stopUserUpdates: stopUserUpdates}
+	return &RedisAuthenticator{
+		Redis:           pool,
+		URL:             url,
+		Role:            role,
+		stopUserUpdates: stopUserUpdates,
+	}, nil
 }
 
 // GetUser returns info about the user with the given username.

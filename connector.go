@@ -100,10 +100,16 @@ func WrapEndpointWithCtx(
 func InitializeConnector(config *Config) *Connector {
 	// Create an authenticator.
 	var authenticator auth.Authenticator
+	var err error
 	if config.Redis.Enabled {
-		authenticator = auth.NewRedisAuthenticator(config.Redis.Role, UsersJsonPath, config.Redis.URL)
+		authenticator, err =
+			auth.NewRedisAuthenticator(config.Redis.Role, UsersJsonPath, config.Redis.URL)
 	} else {
-		authenticator = auth.NewMemoryAuthenticator(UsersJsonPath)
+		authenticator, err = auth.NewMemoryAuthenticator(UsersJsonPath)
+	}
+	if err != nil {
+		// skipcq RVV-A0003
+		log.Fatalln("An error occurred while initializing the authenticator!", err)
 	}
 	// Create the connector.
 	connector := &Connector{
@@ -277,13 +283,22 @@ func (connector *Connector) UpdateConfig(config *Config) {
 	defer replaceableAuthenticator.EngineMutex.Unlock()
 	redisAuthenticator, usingRedis := replaceableAuthenticator.Engine.(*auth.RedisAuthenticator)
 	if usingRedis != config.Redis.Enabled ||
-		(usingRedis && redisAuthenticator.URL != config.Redis.URL) {
-		replaceableAuthenticator.Engine.Close() // Bypassing ReplaceableAuthenticator mutex Lock.
+		(usingRedis && redisAuthenticator.URL != config.Redis.URL) ||
+		(usingRedis && redisAuthenticator.Role != config.Redis.Role) {
+		var newAuthenticator auth.Authenticator
+		var err error
 		if config.Redis.Enabled {
-			replaceableAuthenticator.Engine =
+			newAuthenticator, err =
 				auth.NewRedisAuthenticator(config.Redis.Role, UsersJsonPath, config.Redis.URL)
 		} else {
-			replaceableAuthenticator.Engine = auth.NewMemoryAuthenticator(UsersJsonPath)
+			newAuthenticator, err = auth.NewMemoryAuthenticator(UsersJsonPath)
+		}
+		if err != nil {
+			// TODO: Propagate the error upwards to the user? Failed config reload should be reverted.
+			log.Println("Failed to update authenticator during config reload!", err)
+		} else {
+			redisAuthenticator.Close()
+			replaceableAuthenticator.Engine = newAuthenticator
 		}
 	}
 	// Add new processes.
@@ -305,5 +320,5 @@ func (connector *Connector) UpdateConfig(config *Config) {
 		}
 		return true
 	})
-	// TODO: Reload HTTP/Unix socket server.
+	// TODO: Reload HTTP/WebUI/Unix socket server.
 }
