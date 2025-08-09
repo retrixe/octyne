@@ -85,7 +85,7 @@ jobs:
       run: go build -o ${{ matrix.os == 'windows-latest' && 'octyne-arm64.exe' || 'octyne-arm64' }} -ldflags="-s -w" -v .
 
     - name: Build ARMv6 binary for Linux
-      if: ${{ success() && matrix.os == 'ubuntu-20.04' }}
+      if: ${{ success() && startsWith(matrix.os, 'ubuntu') }}
       run: GOARCH=arm GOARM=6 go build -o octyne-armv6 -ldflags="-s -w" -v .
 
     - name: Upload a Build Artifact
