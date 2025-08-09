@@ -121,13 +121,13 @@ Example `config.json` file:
     "group": "" // optional, sets the socket's group owner, if absent, default is current user's primary group
   },
   "redis": {
-    // whether Octyne should use Redis for authentication, mainly useful for multi-node setups
-    // to show them in the same Web UI and share user accounts/login sessions.
-    // Redis will also persist login sessions across restarts.
+    // whether Octyne should use Redis for authentication
+    // useful for multi-node setups (see README) and/or persisting login sessions across restarts
     "enabled": false,
     "url": "redis://localhost", // link to Redis server
     "role": "primary" // role of this node, primary or secondary
-    // note: there should be 1 primary node to manage/authenticate users in a multi-node setup!
+                      // note: there should be 1 (and only 1) primary node
+                      // to manage users and sessions in a multi-node setup!
   },
   "https": {
     "enabled": false, // whether Octyne should listen using HTTP or HTTPS
@@ -180,15 +180,17 @@ By default, Octyne will log all actions performed by users. You can enable/disab
 
 ## Multi-node Setup
 
-A multi-node setup allows you to run Octyne multiple times across different servers, and manage them from a single Web UI (via standalone Ecthelion). This is useful for scaling your applications or managing multiple servers from one place.
+A multi-node setup is a configuration where Octyne is running on multiple machines. This is useful for scaling your applications and managing apps on multiple machines from one place.
 
-In such a setup, you can use Redis to share user accounts and login sessions across nodes. Set `"redis.enabled": true` in `config.json` on all nodes, ensure they all connect to the same Redis server, and configure the `role` field in the Redis config.
+Octyne supports managing such configurations centrally, using Redis to centralise authentication and standalone Ecthelion to provide a web dashboard from where you can manage all nodes. (Note: Built-in Octyne Web UI currently does not support multi-node setups, hence standalone Ecthelion is required.)
 
-The `role` field in the Redis config determines whether a node is a primary or secondary node. The primary node is responsible for managing user accounts and sessions, while secondary nodes rely on the primary node instead of managing user accounts and sessions themselves. Attempting to login/logout or manage accounts on a secondary node will result in an error, and they will not read the `users.json` file either.
+To setup such a configuration:
 
-You should have one (and only one!) primary node in your multi-node setup, which will handle user management and authentication. All other nodes should be set to the secondary role.
-
-For a Web UI to manage your multi-node Octyne setup, setup a standalone Ecthelion instance. [Read the Ecthelion documentation for details on how to set it up.](https://github.com/retrixe/ecthelion#quick-start-standalone) Ecthelion's `config.json` must be configured with the primary node's URL in `ip` along with the URL of each secondary node in the `nodes` field.
+- Enable Redis on every machine, by editing the `redis` section in `config.json`, setting `enabled` to `true`, and pointing the `url` to the Redis server (e.g. `redis://localhost:6379`).
+- Configure the `role` field in the Redis config to `primary` on the primary node, and `secondary` on all other nodes.
+  - The primary node is responsible for storing and managing user accounts, authenticating users, and managing sessions. There must be one and only one primary node in a multi-node setup.
+  - Secondary nodes rely on the primary node for user account and session management. They do not store user accounts or sessions themselves.
+- Setup a standalone Ecthelion instance to provide a central web dashboard to manage your Octyne instances. [The Ecthelion documentation covers the setup process.](https://github.com/retrixe/ecthelion#quick-start-standalone) Ecthelion's `config.json` must be configured with the primary node's URL in `ip` along with the URL of each secondary node in the `nodes` field.
 
 ## HTTPS Setup
 
