@@ -19,7 +19,7 @@ import (
 )
 
 // OctyneVersion is the last version of Octyne this code is based on.
-const OctyneVersion = "1.3.0"
+const OctyneVersion = "1.4.0"
 
 // Embed the Web UI
 //
