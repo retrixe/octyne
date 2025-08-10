@@ -12,14 +12,14 @@ import (
 	"github.com/retrixe/octyne/system"
 )
 
-var validUsernameRegex = regexp.MustCompile(`^[a-zA-Z0-9_@]+$`)
+var validUsernameRegex = regexp.MustCompile(`^[a-zA-Z0-9_\-@]+$`)
 
 func ValidateUsername(username string) string {
 	if username == "@local" {
 		return "The username '@local' is reserved for local system users."
 	} else if !validUsernameRegex.MatchString(username) {
 		return "The username '" + username + "' is invalid." +
-			" A valid username can contain only letters, numbers, _ or @."
+			" A valid username can contain only letters, numbers, -, _ or @."
 	}
 	return ""
 }
