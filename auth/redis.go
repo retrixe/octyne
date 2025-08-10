@@ -24,8 +24,8 @@ func NewRedisAuthenticator(
 ) (*RedisAuthenticator, error) {
 	pool := &redis.Pool{
 		Wait:      true,
-		MaxIdle:   5,
-		MaxActive: 5,
+		MaxIdle:   10,
+		MaxActive: 10,
 		Dial: func() (redis.Conn, error) {
 			conn, err := redis.DialURL(url, redis.DialConnectTimeout(time.Second*60))
 			if err != nil {
@@ -109,6 +109,13 @@ func (a *RedisAuthenticator) GetUser(username string) (string, error) {
 	return user, nil
 }
 
+func (a *RedisAuthenticator) getTokenFromRedis(token string) (string, error) {
+	conn := a.Redis.Get()
+	defer conn.Close()
+	user, err := redis.String(conn.Do("GET", "octyne-token:"+token))
+	return user, err
+}
+
 // Validate is called on an HTTP API request and returns the username if request is authenticated,
 // else returns an empty string.
 func (a *RedisAuthenticator) Validate(r *http.Request) (string, error) {
@@ -121,9 +128,7 @@ func (a *RedisAuthenticator) Validate(r *http.Request) (string, error) {
 		return "", nil
 	}
 	// Make request to Redis database.
-	conn := a.Redis.Get()
-	defer conn.Close()
-	username, err := redis.String(conn.Do("GET", "octyne-token:"+token))
+	username, err := a.getTokenFromRedis(token)
 	if err == nil {
 		if _, err := a.GetUser(username); err == nil {
 			return username, nil
