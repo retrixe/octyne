@@ -20,7 +20,7 @@ var defaultConfig = Config{
 		Enabled: true,
 		Port:    7877,
 	},
-	Redis:   RedisConfig{URL: "redis://localhost", Role: "primary"}, // TODO: Remove default in 2.0
+	Redis:   RedisConfig{URL: "redis://localhost"},
 	Servers: map[string]ServerConfig{},
 }
 

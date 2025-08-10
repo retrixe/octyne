@@ -126,8 +126,8 @@ Example `config.json` file:
     "enabled": false,
     "url": "redis://localhost", // link to Redis server
     "role": "primary" // role of this node, primary or secondary
-                      // note: there should be 1 (and only 1) primary node
-                      // to manage users and sessions in a multi-node setup!
+                      // note: there must be one (and only one!) primary node to manage users
+                      //       and sessions when using Redis e.g. for a multi-node setup
   },
   "https": {
     "enabled": false, // whether Octyne should listen using HTTP or HTTPS
