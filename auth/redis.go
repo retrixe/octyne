@@ -99,6 +99,11 @@ func NewRedisAuthenticator(
 func (a *RedisAuthenticator) GetUser(username string) (string, error) {
 	conn := a.Redis.Get()
 	defer conn.Close()
+	return a.getUser(conn, username)
+}
+
+// Internal function to get user from Redis
+func (a *RedisAuthenticator) getUser(conn redis.Conn, username string) (string, error) {
 	user, err := redis.String(conn.Do("GET", "octyne-user:"+username))
 	if err != nil {
 		if errors.Is(err, redis.ErrNil) {
@@ -107,13 +112,6 @@ func (a *RedisAuthenticator) GetUser(username string) (string, error) {
 		return "", err
 	}
 	return user, nil
-}
-
-func (a *RedisAuthenticator) getTokenFromRedis(token string) (string, error) {
-	conn := a.Redis.Get()
-	defer conn.Close()
-	user, err := redis.String(conn.Do("GET", "octyne-token:"+token))
-	return user, err
 }
 
 // Validate is called on an HTTP API request and returns the username if request is authenticated,
@@ -128,18 +126,26 @@ func (a *RedisAuthenticator) Validate(r *http.Request) (string, error) {
 		return "", nil
 	}
 	// Make request to Redis database.
-	username, err := a.getTokenFromRedis(token)
+	conn := a.Redis.Get()
+	defer conn.Close()
+	username, err := a.getTokenData(conn, token)
 	if err == nil {
-		if _, err := a.GetUser(username); err == nil {
+		if _, err := a.getUser(conn, username); err == nil {
 			return username, nil
 		} else if !errors.Is(err, ErrUserNotFound) {
 			return "", err
 		}
-		a.Logout(token)
+		a.logout(conn, token)
 	} else if !errors.Is(err, redis.ErrNil) {
 		return "", err
 	}
 	return "", nil
+}
+
+// Internal function to get token data from Redis
+func (a *RedisAuthenticator) getTokenData(conn redis.Conn, token string) (string, error) {
+	user, err := redis.String(conn.Do("GET", "octyne-token:"+token))
+	return user, err
 }
 
 // ValidateAndReject is called on an HTTP API request and returns the username if request
@@ -190,11 +196,13 @@ func (a *RedisAuthenticator) Logout(token string) (bool, error) {
 	}
 	conn := a.Redis.Get()
 	defer conn.Close()
+	return a.logout(conn, token)
+}
+
+// Internal function for performing logouts
+func (a *RedisAuthenticator) logout(conn redis.Conn, token string) (bool, error) {
 	res, err := redis.Int(conn.Do("DEL", "octyne-token:"+token))
-	if err != nil {
-		return false, err
-	}
-	return res == 1, nil
+	return err == nil && res == 1, err
 }
 
 // Close closes the authenticator. Once closed, the authenticator should not be used.
