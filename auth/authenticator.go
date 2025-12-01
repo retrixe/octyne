@@ -19,8 +19,14 @@ type Authenticator interface {
 	// else returns an empty string.
 	Validate(r *http.Request) (string, error)
 	// ValidateAndReject is called on an HTTP API request and returns the username if request
-	// is authenticated, else the request is rejected.
+	// is authenticated, else returns an empty string and rejects the request.
 	ValidateAndReject(w http.ResponseWriter, r *http.Request) string
+	// HasPerm returns a boolean indicating whether or not the user has the requested permission.
+	HasPerm(username string, permission string) (bool, error)
+	// ValidatePermAndReject is called on an HTTP API request and returns the username if request is
+	// authenticated, and a boolean indicating whether or not the user has the requested permission.
+	// If unauthenticated or forbidden, the request is rejected with a 401 or 403 error respectively.
+	ValidatePermAndReject(w http.ResponseWriter, r *http.Request, permission string) (string, bool)
 	// CanManageAuth returns whether or not this authenticator can manage auth, i.e. users and tokens.
 	CanManageAuth() bool
 	// Login allows logging in a user and returning the token.
@@ -66,6 +72,22 @@ func (a *ReplaceableAuthenticator) ValidateAndReject(w http.ResponseWriter, r *h
 	a.EngineMutex.RLock()
 	defer a.EngineMutex.RUnlock()
 	return a.Engine.ValidateAndReject(w, r)
+}
+
+// HasPerm returns a boolean indicating whether or not the user has the requested permission.
+func (a *ReplaceableAuthenticator) HasPerm(username string, permission string) (bool, error) {
+	a.EngineMutex.RLock()
+	defer a.EngineMutex.RUnlock()
+	return a.Engine.HasPerm(username, permission)
+}
+
+// ValidatePermAndReject is called on an HTTP API request and returns the username if request is
+// authenticated, and a boolean indicating whether or not the user has the requested permission.
+// If unauthenticated or forbidden, the request is rejected with a 401 or 403 error respectively.
+func (a *ReplaceableAuthenticator) ValidatePermAndReject(w http.ResponseWriter, r *http.Request, permission string) (string, bool) {
+	a.EngineMutex.RLock()
+	defer a.EngineMutex.RUnlock()
+	return a.Engine.ValidatePermAndReject(w, r, permission)
 }
 
 // CanManageAuth returns whether or not this authenticator can manage auth, i.e. users and tokens.

@@ -149,7 +149,7 @@ func (a *RedisAuthenticator) getTokenData(conn redis.Conn, token string) (string
 }
 
 // ValidateAndReject is called on an HTTP API request and returns the username if request
-// is authenticated, else the request is rejected.
+// is authenticated, else returns an empty string and rejects the request.
 func (a *RedisAuthenticator) ValidateAndReject(w http.ResponseWriter, r *http.Request) string {
 	username, err := a.Validate(r)
 	if err != nil {
@@ -164,6 +164,34 @@ func (a *RedisAuthenticator) ValidateAndReject(w http.ResponseWriter, r *http.Re
 		return ""
 	}
 	return username
+}
+
+// HasPerm returns a boolean indicating whether or not the user has the requested permission.
+func (*RedisAuthenticator) HasPerm(_ string, _ string) (bool, error) {
+	return true, nil
+}
+
+// ValidatePermAndReject is called on an HTTP API request and returns the username if request is
+// authenticated, and a boolean indicating whether or not the user has the requested permission.
+// If unauthenticated or forbidden, the request is rejected with a 401 or 403 error respectively.
+func (a *RedisAuthenticator) ValidatePermAndReject(w http.ResponseWriter, r *http.Request, permission string) (string, bool) {
+	username := a.ValidateAndReject(w, r)
+	if username == "" {
+		return "", false
+	}
+	hasPerm, err := a.HasPerm(username, permission)
+	if err != nil {
+		w.Header().Set("content-type", "application/json")
+		log.Println("An error occurred while validating authorization for an HTTP request!", err)
+		http.Error(w, "{\"error\": \"Internal Server Error!\"}", http.StatusInternalServerError)
+		return "", false
+	} else if !hasPerm {
+		w.Header().Set("content-type", "application/json")
+		http.Error(w, "{\"error\": \"You are not allowed to access this resource!\"}",
+			http.StatusForbidden)
+		return "", false
+	}
+	return username, true
 }
 
 // CanManageAuth returns whether or not this authenticator can manage auth, i.e. users and tokens.
