@@ -99,11 +99,11 @@ func NewRedisAuthenticator(
 func (a *RedisAuthenticator) GetUser(username string) (string, error) {
 	conn := a.Redis.Get()
 	defer conn.Close()
-	return a.getUser(conn, username)
+	return a.getUserInternal(conn, username)
 }
 
 // Internal function to get user from Redis
-func (a *RedisAuthenticator) getUser(conn redis.Conn, username string) (string, error) {
+func (*RedisAuthenticator) getUserInternal(conn redis.Conn, username string) (string, error) {
 	user, err := redis.String(conn.Do("GET", "octyne-user:"+username))
 	if err != nil {
 		if errors.Is(err, redis.ErrNil) {
@@ -130,12 +130,12 @@ func (a *RedisAuthenticator) Validate(r *http.Request) (string, error) {
 	defer conn.Close()
 	username, err := a.getTokenData(conn, token)
 	if err == nil {
-		if _, err := a.getUser(conn, username); err == nil {
+		if _, err := a.getUserInternal(conn, username); err == nil {
 			return username, nil
 		} else if !errors.Is(err, ErrUserNotFound) {
 			return "", err
 		}
-		a.logout(conn, token)
+		a.logoutInternal(conn, token)
 	} else if !errors.Is(err, redis.ErrNil) {
 		return "", err
 	}
@@ -143,7 +143,7 @@ func (a *RedisAuthenticator) Validate(r *http.Request) (string, error) {
 }
 
 // Internal function to get token data from Redis
-func (a *RedisAuthenticator) getTokenData(conn redis.Conn, token string) (string, error) {
+func (*RedisAuthenticator) getTokenData(conn redis.Conn, token string) (string, error) {
 	user, err := redis.String(conn.Do("GET", "octyne-token:"+token))
 	return user, err
 }
@@ -224,11 +224,11 @@ func (a *RedisAuthenticator) Logout(token string) (bool, error) {
 	}
 	conn := a.Redis.Get()
 	defer conn.Close()
-	return a.logout(conn, token)
+	return a.logoutInternal(conn, token)
 }
 
 // Internal function for performing logouts
-func (a *RedisAuthenticator) logout(conn redis.Conn, token string) (bool, error) {
+func (*RedisAuthenticator) logoutInternal(conn redis.Conn, token string) (bool, error) {
 	res, err := redis.Int(conn.Do("DEL", "octyne-token:"+token))
 	return err == nil && res == 1, err
 }
