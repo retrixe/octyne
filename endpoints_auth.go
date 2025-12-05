@@ -145,16 +145,16 @@ type accountsRequestBody struct {
 }
 
 func accountsEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request) {
-	if !connector.Authenticator.CanManageAuth() {
+	if r.Method != "GET" && r.Method != "POST" && r.Method != "PATCH" && r.Method != "DELETE" {
+		httpError(w, "Only GET, POST, PATCH and DELETE are allowed!", http.StatusMethodNotAllowed)
+		return
+	} else if !connector.Authenticator.CanManageAuth() {
 		httpError(w, "This node does not support managing users. "+
 			"Perform user management on the primary node!", http.StatusForbidden)
 		return
 	}
 	user := connector.ValidateAndReject(w, r)
 	if user == "" {
-		return
-	} else if r.Method != "GET" && r.Method != "POST" && r.Method != "PATCH" && r.Method != "DELETE" {
-		httpError(w, "Only GET, POST, PATCH and DELETE are allowed!", http.StatusMethodNotAllowed)
 		return
 	}
 	var users map[string]string

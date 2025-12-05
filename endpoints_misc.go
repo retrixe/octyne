@@ -28,11 +28,9 @@ func configEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request
 	user := connector.ValidateAndReject(w, r)
 	if user == "" {
 		return
-	} else if r.Method != "GET" && r.Method != "PATCH" {
-		httpError(w, "Only GET and PATCH are allowed!", http.StatusMethodNotAllowed)
-		return
 	}
-	if r.Method == "GET" {
+	switch r.Method {
+	case "GET":
 		contents, err := os.ReadFile(ConfigJsonPath)
 		if err != nil {
 			log.Println("Error reading "+ConfigJsonPath+" when user accessed /config!", err)
@@ -42,7 +40,7 @@ func configEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request
 		connector.Info("config.view", "ip", GetIP(r), "user", user)
 		w.Header().Set("content-type", "application/json")
 		_, _ = w.Write(contents)
-	} else if r.Method == "PATCH" {
+	case "PATCH":
 		var buffer bytes.Buffer
 		_, err := buffer.ReadFrom(r.Body)
 		if err != nil {
@@ -77,6 +75,8 @@ func configEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request
 		connector.Info("config.edit", "ip", GetIP(r), "user", user, "newConfig", config)
 		writeJsonStringRes(w, "{\"success\":true}")
 		info.Println("Config updated remotely by user over HTTP API (see action logs for info)!")
+	default:
+		httpError(w, "Only GET and PATCH are allowed!", http.StatusMethodNotAllowed)
 	}
 }
 
@@ -156,11 +156,12 @@ func serverEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request
 		httpError(w, "This server does not exist!", http.StatusNotFound)
 		return
 	}
-	if r.Method == "GET" {
+	switch r.Method {
+	case "GET":
 		serverEndpointGet(w, process)
-	} else if r.Method == "POST" {
+	case "POST":
 		serverEndpointPost(connector, w, r, process, id, user)
-	} else {
+	default:
 		httpError(w, "Only GET and POST is allowed!", http.StatusMethodNotAllowed)
 	}
 }
@@ -211,7 +212,8 @@ func serverEndpointPost(connector *Connector, w http.ResponseWriter, r *http.Req
 	}
 	operation := strings.ToUpper(body.String())
 	// Check whether the operation is correct or not.
-	if operation == "START" {
+	switch operation {
+	case "START":
 		// Start process if required.
 		if process.Online.Load() != 1 {
 			err = process.StartProcess(connector)
@@ -221,7 +223,7 @@ func serverEndpointPost(connector *Connector, w http.ResponseWriter, r *http.Req
 		res := make(map[string]bool)
 		res["success"] = err == nil
 		writeJsonStructRes(w, res) // skipcq GSC-G104
-	} else if operation == "STOP" || operation == "KILL" || operation == "TERM" {
+	case "STOP", "KILL", "TERM":
 		// Stop process if required.
 		if process.Online.Load() == 1 {
 			// Octyne 2.x should drop STOP or move it to SIGTERM.
@@ -237,9 +239,8 @@ func serverEndpointPost(connector *Connector, w http.ResponseWriter, r *http.Req
 		res := make(map[string]bool)
 		res["success"] = true
 		writeJsonStructRes(w, res) // skipcq GSC-G104
-	} else {
+	default:
 		httpError(w, "Invalid operation requested!", http.StatusBadRequest)
-		return
 	}
 }
 

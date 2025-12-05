@@ -56,11 +56,12 @@ func filesEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request)
 		httpError(w, "This server does not exist!", http.StatusNotFound)
 		return
 	}
-	if r.Method == "GET" {
+	switch r.Method {
+	case "GET":
 		filesEndpointGet(w, r, process)
-	} else if r.Method == "PATCH" {
+	case "PATCH":
 		filesEndpointPatch(connector, w, r, process, id, user)
-	} else {
+	default:
 		httpError(w, "Only GET and PATCH are allowed!", http.StatusMethodNotAllowed)
 	}
 }
@@ -363,15 +364,16 @@ func fileEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request) 
 		httpError(w, "The file requested is outside the server!", http.StatusForbidden)
 		return
 	}
-	if r.Method == "GET" {
+	switch r.Method {
+	case "GET":
 		fileEndpointGet(connector, w, r, id, filePath, user)
-	} else if r.Method == "DELETE" {
+	case "DELETE":
 		fileEndpointDelete(connector, w, r, id, filePath, user)
-	} else if r.Method == "POST" {
+	case "POST":
 		fileEndpointPost(connector, w, r, id, filePath, user)
-	} else if r.Method == "PATCH" {
+	case "PATCH":
 		fileEndpointPatch(connector, w, r, process, id, user)
-	} else {
+	default:
 		httpError(w, "Only GET, POST, PATCH and DELETE are allowed!", http.StatusMethodNotAllowed)
 	}
 }
@@ -733,15 +735,16 @@ func compressionEndpoint(connector *Connector, w http.ResponseWriter, r *http.Re
 			}
 		} else {
 			var archive *tar.Writer
-			if compression == "true" || compression == "gzip" || compression == "" {
+			switch compression {
+			case "true", "gzip", "":
 				compressionWriter := gzip.NewWriter(archiveFile)
 				defer compressionWriter.Close()
 				archive = tar.NewWriter(compressionWriter)
-			} else if compression == "xz" || compression == "zstd" {
+			case "xz", "zstd":
 				compressionWriter := system.NativeCompressionWriter(archiveFile, compression)
 				defer compressionWriter.Close()
 				archive = tar.NewWriter(compressionWriter)
-			} else {
+			default:
 				archive = tar.NewWriter(archiveFile)
 			}
 			defer archive.Close()

@@ -104,10 +104,10 @@ func (*MemoryAuthenticator) HasPerm(_ string, _ string) (bool, error) {
 	return true, nil
 }
 
-// ValidatePermAndReject is called on an HTTP API request and returns the username if request is
+// ValidateWithPermAndReject is called on an HTTP API request and returns the username if request is
 // authenticated, and a boolean indicating whether or not the user has the requested permission.
 // If unauthenticated or forbidden, the request is rejected with a 401 or 403 error respectively.
-func (a *MemoryAuthenticator) ValidatePermAndReject(w http.ResponseWriter, r *http.Request, permission string) (string, bool) {
+func (a *MemoryAuthenticator) ValidateWithPermAndReject(w http.ResponseWriter, r *http.Request, permission string) (string, bool) {
 	username := a.ValidateAndReject(w, r)
 	if username == "" {
 		return "", false
