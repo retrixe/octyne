@@ -25,12 +25,12 @@ func rootEndpoint(w http.ResponseWriter, _ *http.Request) {
 // GET /config
 // PATCH /config
 func configEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request) {
-	user := connector.ValidateAndReject(w, r)
-	if user == "" {
-		return
-	}
 	switch r.Method {
 	case "GET":
+		user, hasPerm := connector.ValidateWithPermAndReject(w, r, "config.view")
+		if user == "" || !hasPerm {
+			return
+		}
 		contents, err := os.ReadFile(ConfigJsonPath)
 		if err != nil {
 			log.Println("Error reading "+ConfigJsonPath+" when user accessed /config!", err)
@@ -41,6 +41,10 @@ func configEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request
 		w.Header().Set("content-type", "application/json")
 		_, _ = w.Write(contents)
 	case "PATCH":
+		user, hasPerm := connector.ValidateWithPermAndReject(w, r, "config.edit")
+		if user == "" || !hasPerm {
+			return
+		}
 		var buffer bytes.Buffer
 		_, err := buffer.ReadFrom(r.Body)
 		if err != nil {
@@ -83,8 +87,8 @@ func configEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request
 // GET /config/reload
 func configReloadEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request) {
 	// Check with authenticator.
-	user := connector.ValidateAndReject(w, r)
-	if user == "" {
+	user, hasPerm := connector.ValidateWithPermAndReject(w, r, "config.reload")
+	if user == "" || !hasPerm {
 		return
 	}
 	// Read the new config.
@@ -109,23 +113,36 @@ type serversResponse struct {
 
 func serversEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request) {
 	// Check with authenticator.
-	if connector.ValidateAndReject(w, r) == "" {
+	user := connector.ValidateAndReject(w, r)
+	if user == "" {
 		return
 	}
 	// Get a map of processes and their online status.
 	processes := make(map[string]interface{})
-	connector.Processes.Range(func(_ string, v *ExposedProcess) bool {
-		if r.URL.Query().Get("extrainfo") == "true" {
-			processes[v.Name] = map[string]interface{}{
+	errored := false
+	connector.Processes.Range(func(name string, v *ExposedProcess) bool {
+		hasPerm, err := connector.Authenticator.HasPerm(user, "server<"+name+">.view")
+		if !hasPerm {
+			return true
+		} else if err != nil {
+			log.Println("An error occurred while checking permissions for user \""+user+"\"!", err)
+			httpError(w, "Internal Server Error!", http.StatusInternalServerError)
+			errored = true
+			return false
+		} else if r.URL.Query().Get("extrainfo") == "true" {
+			processes[name] = map[string]interface{}{
 				"status":   v.Online.Load(),
 				"toDelete": v.ToDelete.Load(),
 			}
 		} else {
-			processes[v.Name] = v.Online.Load()
+			processes[name] = v.Online.Load()
 		}
 		return true
 	})
 	// Send the list.
+	if errored {
+		return
+	}
 	writeJsonStructRes(w, serversResponse{Servers: processes}) // skipcq GSC-G104
 }
 
@@ -143,13 +160,23 @@ type serverResponse struct {
 var totalMemory = int64(system.GetTotalSystemMemory())
 
 func serverEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
 	// Check with authenticator.
-	user := connector.ValidateAndReject(w, r)
-	if user == "" {
+	var perm string
+	switch r.Method {
+	case "GET":
+		perm = "server<" + id + ">.view"
+	case "POST":
+		perm = "server<" + id + ">.control"
+	default:
+		httpError(w, "Only GET and POST is allowed!", http.StatusMethodNotAllowed)
+		return
+	}
+	user, hasPerm := connector.ValidateWithPermAndReject(w, r, perm)
+	if user == "" || !hasPerm {
 		return
 	}
 	// Get the process being accessed.
-	id := r.PathValue("id")
 	process, err := connector.Processes.Load(id)
 	// In case the process doesn't exist.
 	if !err {
@@ -161,8 +188,6 @@ func serverEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request
 		serverEndpointGet(w, process)
 	case "POST":
 		serverEndpointPost(connector, w, r, process, id, user)
-	default:
-		httpError(w, "Only GET and POST is allowed!", http.StatusMethodNotAllowed)
 	}
 }
 
@@ -261,10 +286,12 @@ type consolePing struct {
 }
 
 type consoleSettings struct {
-	Type string `json:"type"`
+	Type     string `json:"type"`
+	ReadOnly bool   `json:"readOnly"`
 }
 
 func consoleEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
 	// Get console protocol version.
 	v2 := slices.Contains(websocket.Subprotocols(r), "console-v2")
 	// Check with authenticator.
@@ -276,12 +303,23 @@ func consoleEndpoint(connector *Connector, w http.ResponseWriter, r *http.Reques
 	} else {
 		user, userErr = connector.Authenticator.Validate(r)
 	}
+	hasPerm := false
+	canWrite := false
+	if user != "" && userErr == nil {
+		hasPerm, userErr = connector.Authenticator.HasPerm(user, "server<"+id+">.console.view")
+		if userErr == nil {
+			canWrite, userErr = connector.Authenticator.HasPerm(user, "server<"+id+">.console.write")
+		}
+	}
 	if !v2 && userErr != nil {
 		log.Println("An error occurred while validating authorization for an HTTP request!", userErr)
 		httpError(w, "Internal Server Error!", http.StatusInternalServerError)
 		return
 	} else if !v2 && user == "" {
 		httpError(w, "You are not authenticated to access this resource!", http.StatusUnauthorized)
+		return
+	} else if !v2 && !hasPerm {
+		httpError(w, "You are not allowed to access this resource!", http.StatusForbidden)
 		return
 	}
 	// Retrieve the token.
@@ -290,7 +328,6 @@ func consoleEndpoint(connector *Connector, w http.ResponseWriter, r *http.Reques
 		token = ticket.Token
 	}
 	// Get the server being accessed.
-	id := r.PathValue("id")
 	process, exists := connector.Processes.Load(id)
 	// In case the server doesn't exist.
 	if !exists && !v2 {
@@ -311,6 +348,9 @@ func consoleEndpoint(connector *Connector, w http.ResponseWriter, r *http.Reques
 			} else if user == "" {
 				errStr = "You are not authenticated to access this resource!"
 				errNo = 4000 + http.StatusUnauthorized
+			} else if !hasPerm {
+				errStr = "You are not allowed to access this resource!"
+				errNo = 4000 + http.StatusForbidden
 			}
 			if errStr != "" {
 				c.WriteJSON(consoleError{"error", errStr})
@@ -327,7 +367,7 @@ func consoleEndpoint(connector *Connector, w http.ResponseWriter, r *http.Reques
 		// If v2, send settings and set read deadline.
 		if v2 {
 			c.SetReadDeadline(time.Now().Add(timeout))
-			c.WriteJSON(consoleSettings{"settings"})
+			c.WriteJSON(consoleSettings{"settings", !canWrite})
 		}
 		// Use a channel to synchronise all writes to the WebSocket.
 		writeChannel := make(chan interface{}, 8)
@@ -398,7 +438,8 @@ func consoleEndpoint(connector *Connector, w http.ResponseWriter, r *http.Reques
 				var data map[string]string
 				err := json.Unmarshal(message, &data)
 				if err == nil {
-					if data["type"] == "input" && data["data"] != "" {
+					if data["type"] == "input" && data["data"] != "" && canWrite {
+						// Simply drop inputs if the user cannot write.
 						connector.Info("server.console.input", "ip", GetIP(r), "user", user, "server", id,
 							"input", data["data"])
 						process.SendCommand(data["data"])
@@ -413,7 +454,7 @@ func consoleEndpoint(connector *Connector, w http.ResponseWriter, r *http.Reques
 					json, _ := json.Marshal(consoleError{"error", "Invalid message format"})
 					writeChannel <- json
 				}
-			} else {
+			} else if canWrite {
 				connector.Info("server.console.input", "ip", GetIP(r), "user", user, "server", id,
 					"input", string(message))
 				process.SendCommand(string(message))

@@ -43,13 +43,23 @@ type serverFilesResponse struct {
 }
 
 func filesEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
 	// Check with authenticator.
-	user := connector.ValidateAndReject(w, r)
-	if user == "" {
+	var perm string
+	switch r.Method {
+	case "GET":
+		perm = "server<" + id + ">.files.view"
+	case "PATCH":
+		perm = "server<" + id + ">.files.modify"
+	default:
+		httpError(w, "Only GET and PATCH are allowed!", http.StatusMethodNotAllowed)
+		return
+	}
+	user, hasPerm := connector.ValidateWithPermAndReject(w, r, perm)
+	if user == "" || !hasPerm {
 		return
 	}
 	// Get the process being accessed.
-	id := r.PathValue("id")
 	process, err := connector.Processes.Load(id)
 	// In case the process doesn't exist.
 	if !err {
@@ -61,8 +71,6 @@ func filesEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request)
 		filesEndpointGet(w, r, process)
 	case "PATCH":
 		filesEndpointPatch(connector, w, r, process, id, user)
-	default:
-		httpError(w, "Only GET and PATCH are allowed!", http.StatusMethodNotAllowed)
 	}
 }
 
@@ -340,15 +348,30 @@ func filesEndpointPatch(
 // DELETE /server/{id}/file?path=path
 // PATCH /server/{id}/file?path=path
 func fileEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var perm string
+	switch r.Method {
+	case "GET":
+		perm = "server<" + id + ">.files.download"
+	case "DELETE":
+		perm = "server<" + id + ">.files.modify"
+	case "POST":
+		perm = "server<" + id + ">.files.upload"
+	case "PATCH":
+		perm = "server<" + id + ">.files.modify"
+	default:
+		httpError(w, "Only GET, POST, PATCH and DELETE are allowed!", http.StatusMethodNotAllowed)
+		return
+	}
 	ticket, ticketExists := connector.Tickets.LoadAndDelete(r.URL.Query().Get("ticket"))
 	user := ""
+	hasPerm := false
 	if ticketExists && ticket.IPAddr == GetIP(r) && r.Method == "GET" {
 		user = ticket.User
-	} else if user = connector.ValidateAndReject(w, r); user == "" {
+	} else if user, hasPerm = connector.ValidateWithPermAndReject(w, r, perm); user == "" || !hasPerm {
 		return
 	}
 	// Get the process being accessed.
-	id := r.PathValue("id")
 	process, err := connector.Processes.Load(id)
 	// In case the process doesn't exist.
 	if !err {
@@ -373,8 +396,6 @@ func fileEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request) 
 		fileEndpointPost(connector, w, r, id, filePath, user)
 	case "PATCH":
 		fileEndpointPatch(connector, w, r, process, id, user)
-	default:
-		httpError(w, "Only GET, POST, PATCH and DELETE are allowed!", http.StatusMethodNotAllowed)
 	}
 }
 
@@ -557,13 +578,13 @@ func fileEndpointDelete(connector *Connector, w http.ResponseWriter, r *http.Req
 
 // POST /server/{id}/folder?path=path
 func folderEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
 	// Check with authenticator.
-	user := connector.ValidateAndReject(w, r)
-	if user == "" {
+	user, hasPerm := connector.ValidateWithPermAndReject(w, r, "server<"+id+">.files.createFolder")
+	if user == "" || !hasPerm {
 		return
 	}
 	// Get the process being accessed.
-	id := r.PathValue("id")
 	process, err := connector.Processes.Load(id)
 	// In case the process doesn't exist.
 	if !err {
@@ -606,13 +627,13 @@ func folderEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request
 var compressionProgressMap = xsync.NewMapOf[string, string]()
 
 func compressionEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
 	// Check with authenticator.
-	user := connector.ValidateAndReject(w, r)
-	if user == "" {
+	user, hasPerm := connector.ValidateWithPermAndReject(w, r, "server<"+id+">.files.compress")
+	if user == "" || !hasPerm {
 		return
 	}
 	// Get the process being accessed.
-	id := r.PathValue("id")
 	process, exists := connector.Processes.Load(id)
 	// In case the process doesn't exist.
 	if !exists {
@@ -785,13 +806,13 @@ func compressionEndpoint(connector *Connector, w http.ResponseWriter, r *http.Re
 
 // POST /server/{id}/decompress?path=path
 func decompressionEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
 	// Check with authenticator.
-	user := connector.ValidateAndReject(w, r)
-	if user == "" {
+	user, hasPerm := connector.ValidateWithPermAndReject(w, r, "server<"+id+">.files.decompress")
+	if user == "" || !hasPerm {
 		return
 	}
 	// Get the process being accessed.
-	id := r.PathValue("id")
 	process, err := connector.Processes.Load(id)
 	// In case the process doesn't exist.
 	if !err {

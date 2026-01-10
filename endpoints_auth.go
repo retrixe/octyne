@@ -153,8 +153,19 @@ func accountsEndpoint(connector *Connector, w http.ResponseWriter, r *http.Reque
 			"Perform user management on the primary node!", http.StatusForbidden)
 		return
 	}
-	user := connector.ValidateAndReject(w, r)
-	if user == "" {
+	perm := ""
+	switch r.Method {
+	case "GET":
+		perm = "accounts.view"
+	case "POST":
+		perm = "accounts.create"
+	case "PATCH":
+		perm = "accounts.update"
+	case "DELETE":
+		perm = "accounts.delete"
+	}
+	user, hasPerm := connector.ValidateWithPermAndReject(w, r, perm)
+	if user == "" || !hasPerm {
 		return
 	}
 	var users map[string]string
