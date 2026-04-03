@@ -166,8 +166,7 @@ func validateFileOperation(operation *fileOperation, process *ExposedProcess) st
 	if operation.Operation == "mv" || operation.Operation == "cp" {
 		// Resolve dest and check if dest exists within bounds of the server directory.
 		operation.Dest = joinPath(process.Directory, operation.Dest)
-		if !strings.HasPrefix(operation.Dest, clean(process.Directory)) ||
-			operation.Dest == clean(process.Directory) {
+		if !strings.HasPrefix(operation.Dest, clean(process.Directory)) {
 			return "The path(s) specified in dest is outside the server!"
 		}
 	}
@@ -512,6 +511,15 @@ func fileEndpointPatch(connector *Connector, w http.ResponseWriter, r *http.Requ
 		// Check if destination file exists.
 		if stat, err := os.Stat(newpath); err == nil && stat.IsDir() {
 			newpath = joinPath(newpath, path.Base(oldpath))
+			_, err := os.Stat(newpath)
+			if err == nil {
+				httpError(w, "This file already exists!", http.StatusMethodNotAllowed)
+				return
+			} else if !os.IsNotExist(err) {
+				log.Println("An error occurred in mv/cp API when checking for "+newpath, "("+process.Name+")", err)
+				httpError(w, "Internal Server Error!", http.StatusInternalServerError)
+				return
+			}
 		} else if err == nil {
 			httpError(w, "This file already exists!", http.StatusMethodNotAllowed)
 			return

@@ -81,6 +81,8 @@ func CopyFile(path string, dest string) error {
 	}
 	if !stat.Mode().IsRegular() {
 		return fmt.Errorf("%s is not a proper file", path)
+	} else if path == dest {
+		return nil // no-op for now, else: fmt.Errorf("source and destination are the same file")
 	}
 
 	// Open path.
