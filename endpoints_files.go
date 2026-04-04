@@ -177,10 +177,10 @@ func performMoveCopyOperation(operation *fileOperation) (int, string) {
 	// Validate source
 	srcStat, err := os.Stat(operation.Src)
 	if err != nil && os.IsNotExist(err) {
-		return 400, "The file specified in src does not exist!"
+		return http.StatusBadRequest, "The file specified in src does not exist!"
 	} else if err != nil {
 		log.Println("An error occurred in mv/cp API when checking for "+operation.Src, err)
-		return 500, "Internal Server Error! " + err.Error()
+		return http.StatusInternalServerError, "Internal Server Error! " + err.Error()
 	}
 
 	// Validate destination
@@ -208,10 +208,10 @@ func performMoveCopyOperation(operation *fileOperation) (int, string) {
 		err = system.Copy(srcStat.Mode(), operation.Src, operation.Dest)
 	}
 	if err != nil && system.IsFileLocked(err) {
-		return 409, err.(*os.LinkError).Err.Error()
+		return http.StatusConflict, err.(*os.LinkError).Err.Error()
 	} else if err != nil {
 		log.Println("An error occurred when performing "+operation.Operation+" from "+operation.Src+" to "+operation.Dest, err)
-		return 500, "Internal Server Error! " + err.Error()
+		return http.StatusInternalServerError, "Internal Server Error! " + err.Error()
 	}
 	return 0, ""
 }
@@ -226,11 +226,11 @@ func performRemoveOperation(operation *fileOperation) (int, string) {
 	// Move file/folder to temporary deletion folder
 	err := os.Rename(operation.Path, operation.Dest)
 	if err != nil && system.IsFileLocked(err) {
-		return 409, err.(*os.LinkError).Err.Error()
+		return http.StatusConflict, err.(*os.LinkError).Err.Error()
 	} else if err != nil && os.IsNotExist(err) {
-		return 400, "The file specified in path does not exist!"
+		return http.StatusBadRequest, "The file specified in path does not exist!"
 	} else if err != nil {
-		return 500, "Internal Server Error! " + err.Error()
+		return http.StatusInternalServerError, "Internal Server Error! " + err.Error()
 	}
 	return 0, ""
 }
@@ -269,7 +269,7 @@ func filesEndpointPatch(
 
 	// TODO: Perhaps we should lock all files on the Windows platform?
 
-	responseStatus := 200
+	responseStatus := http.StatusOK
 	var index int
 	var removeTmpFolder string
 	// Begin executing all operations sequentially
@@ -290,7 +290,7 @@ func filesEndpointPatch(
 			if removeTmpFolder == "" {
 				removeTmpFolder, err = os.MkdirTemp(process.Directory, ".octyne-transaction-")
 				if err != nil {
-					responseStatus = 500
+					responseStatus = http.StatusInternalServerError
 					response.Errors = append(response.Errors, fileOperationError{
 						Index:   index,
 						Message: "Internal Server Error! " + err.Error(),
@@ -313,7 +313,7 @@ func filesEndpointPatch(
 	}
 
 	// Begin a revert upon failure
-	if responseStatus != 200 {
+	if responseStatus != http.StatusOK {
 		for revertIndex := index - 1; revertIndex >= 0; revertIndex-- {
 			source := req.Operations[revertIndex].Src
 			if req.Operations[revertIndex].Operation == "rm" {
@@ -321,7 +321,7 @@ func filesEndpointPatch(
 			}
 			err = os.Rename(req.Operations[revertIndex].Dest, source)
 			if err != nil {
-				responseStatus = 500
+				responseStatus = http.StatusInternalServerError
 				response.Errors = append(response.Errors, fileOperationError{
 					Index:   revertIndex,
 					Message: "Internal Server Error! " + err.Error(),
@@ -334,7 +334,7 @@ func filesEndpointPatch(
 	if removeTmpFolder != "" && len(response.Errors) < 2 { // Reverts completed/Success
 		err = os.RemoveAll(removeTmpFolder)
 		if err != nil {
-			responseStatus = 500
+			responseStatus = http.StatusInternalServerError
 			response.Errors = append(response.Errors, fileOperationError{
 				Index:   -1,
 				Message: "Internal Server Error! " + err.Error(),
