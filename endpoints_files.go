@@ -179,15 +179,26 @@ func performMoveCopyOperation(operation *fileOperation) (int, string) {
 	if err != nil && os.IsNotExist(err) {
 		return 400, "The file specified in src does not exist!"
 	} else if err != nil {
+		log.Println("An error occurred in mv/cp API when checking for "+operation.Src, err)
 		return 500, "Internal Server Error! " + err.Error()
 	}
 
 	// Validate destination
 	destStat, err := os.Stat(operation.Dest)
-	if err == nil && (destStat.IsDir() || srcStat.IsDir()) {
-		return 400, "The destination already exists, and either src or dest are folders!"
-	} else if err != nil && !os.IsNotExist(err) {
-		return 500, "Internal Server Error! " + err.Error()
+	if err == nil && destStat.IsDir() {
+		operation.Dest = joinPath(operation.Dest, path.Base(operation.Src))
+		_, err := os.Stat(operation.Dest)
+		if err == nil {
+			return http.StatusConflict, "This file already exists!"
+		} else if !os.IsNotExist(err) {
+			log.Println("An error occurred in mv/cp API when checking for "+operation.Dest, err)
+			return http.StatusInternalServerError, "Internal Server Error! " + err.Error()
+		}
+	} else if err == nil {
+		return http.StatusConflict, "This file already exists!"
+	} else if !os.IsNotExist(err) {
+		log.Println("An error occurred in mv/cp API when checking for "+operation.Dest, err)
+		return http.StatusInternalServerError, "Internal Server Error! " + err.Error()
 	}
 
 	// Perform move/copy operation
@@ -199,6 +210,7 @@ func performMoveCopyOperation(operation *fileOperation) (int, string) {
 	if err != nil && system.IsFileLocked(err) {
 		return 409, err.(*os.LinkError).Err.Error()
 	} else if err != nil {
+		log.Println("An error occurred when performing "+operation.Operation+" from "+operation.Src+" to "+operation.Dest, err)
 		return 500, "Internal Server Error! " + err.Error()
 	}
 	return 0, ""
@@ -259,12 +271,12 @@ func filesEndpointPatch(
 
 	responseStatus := 200
 	var index int
-	var operation fileOperation
 	var removeTmpFolder string
 	// Begin executing all operations sequentially
-	for index, operation = range req.Operations {
+	for index, _ = range req.Operations {
+		operation := &req.Operations[index] // Use pointer to allow modifying the struct
 		if operation.Operation == "cp" || operation.Operation == "mv" {
-			errStatus, errMsg := performMoveCopyOperation(&operation)
+			errStatus, errMsg := performMoveCopyOperation(operation)
 			if errStatus != 0 {
 				responseStatus = errStatus
 				response.Errors = append(response.Errors, fileOperationError{
@@ -288,7 +300,7 @@ func filesEndpointPatch(
 			}
 			operation.Dest = joinPath(removeTmpFolder, strconv.Itoa(index))
 
-			errStatus, errMsg := performRemoveOperation(&operation)
+			errStatus, errMsg := performRemoveOperation(operation)
 			if errStatus != 0 {
 				responseStatus = errStatus
 				response.Errors = append(response.Errors, fileOperationError{
@@ -496,63 +508,19 @@ func fileEndpointPatch(connector *Connector, w http.ResponseWriter, r *http.Requ
 	}
 	// Possible operations: mv, cp
 	if req.Operation == "mv" || req.Operation == "cp" {
-		oldpath := req.Src
-		newpath := req.Dest
-		// Check if original file exists.
-		stat, err := os.Stat(oldpath)
-		if os.IsNotExist(err) {
-			httpError(w, "This file does not exist!", http.StatusNotFound)
-			return
-		} else if err != nil {
-			log.Println("An error occurred in mv/cp API when checking for "+oldpath, "("+process.Name+")", err)
-			httpError(w, "Internal Server Error!", http.StatusInternalServerError)
+		statusCode, errMsg := performMoveCopyOperation(&req)
+		if statusCode != 0 {
+			httpError(w, errMsg, statusCode)
 			return
 		}
-		// Check if destination file exists.
-		if stat, err := os.Stat(newpath); err == nil && stat.IsDir() {
-			newpath = joinPath(newpath, path.Base(oldpath))
-			_, err := os.Stat(newpath)
-			if err == nil {
-				httpError(w, "This file already exists!", http.StatusMethodNotAllowed)
-				return
-			} else if !os.IsNotExist(err) {
-				log.Println("An error occurred in mv/cp API when checking for "+newpath, "("+process.Name+")", err)
-				httpError(w, "Internal Server Error!", http.StatusInternalServerError)
-				return
-			}
-		} else if err == nil {
-			httpError(w, "This file already exists!", http.StatusMethodNotAllowed)
-			return
-		} else if !os.IsNotExist(err) {
-			log.Println("An error occurred in mv/cp API when checking for "+newpath, "("+process.Name+")", err)
-			httpError(w, "Internal Server Error!", http.StatusInternalServerError)
-			return
-		}
-		// Move file if operation is mv.
 		if req.Operation == "mv" {
-			err := os.Rename(oldpath, newpath)
-			if err != nil && system.IsFileLocked(err) {
-				httpError(w, err.(*os.LinkError).Err.Error(), http.StatusConflict)
-				return
-			} else if err != nil {
-				log.Println("An error occurred when moving "+oldpath+" to "+newpath, "("+process.Name+")", err)
-				httpError(w, "Internal Server Error!", http.StatusInternalServerError)
-				return
-			}
 			connector.Info("server.files.move", "ip", GetIP(r), "user", user, "server", id,
 				"src", clean(req.Src), "dest", clean(req.Dest))
-			writeJsonStringRes(w, "{\"success\":true}")
 		} else {
-			err := system.Copy(stat.Mode(), oldpath, newpath)
-			if err != nil {
-				log.Println("An error occurred when copying "+oldpath+" to "+newpath, "("+process.Name+")", err)
-				httpError(w, "Internal Server Error!", http.StatusInternalServerError)
-				return
-			}
 			connector.Info("server.files.copy", "ip", GetIP(r), "user", user, "server", id,
 				"src", clean(req.Src), "dest", clean(req.Dest))
-			writeJsonStringRes(w, "{\"success\":true}")
 		}
+		writeJsonStringRes(w, "{\"success\":true}")
 	} else {
 		httpError(w, "Invalid operation! Operations available: mv,cp", http.StatusMethodNotAllowed)
 	}

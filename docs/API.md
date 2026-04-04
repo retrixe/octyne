@@ -373,7 +373,7 @@ Each operation is performed in order, and if any operation fails, the entire tra
 *Note:*
 
 - Individual operations *can* depend upon each other, *but they should not!* As of v1.3, this could cause a triggered rollback to mangle the filesystem state if any link in a dependency chain fails to revert. This API currently does not guarantee atomicity.
-- For `mv` or `cp` operations, the destination must not already exist unless overwriting one file with another.
+- For `mv` or `cp` operations, the destination must not already exist. Overwriting destination files is forbidden with v1.4.2, as it has not been implemented transactionally.
 
 **Request Body:**
 
