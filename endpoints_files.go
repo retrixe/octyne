@@ -219,6 +219,18 @@ func performMoveCopyOperation(operation *fileOperation) (int, string) {
 		return http.StatusInternalServerError, "Internal Server Error! " + err.Error()
 	}
 
+	// Ensure parent directory of dest exists and is a directory
+	parent := filepath.Dir(operation.Dest)
+	if parentStat, pErr := os.Stat(parent); pErr != nil {
+		if os.IsNotExist(pErr) {
+			return http.StatusBadRequest, "Destination parent folder does not exist!"
+		}
+		log.Println("An error occurred checking destination parent "+parent, pErr)
+		return http.StatusInternalServerError, "Internal Server Error! " + pErr.Error()
+	} else if !parentStat.IsDir() {
+		return http.StatusBadRequest, "Destination parent is not a folder!"
+	}
+
 	// Perform move/copy operation
 	if operation.Operation == "mv" {
 		err = os.Rename(operation.Src, operation.Dest)
