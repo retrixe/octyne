@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -23,14 +24,27 @@ import (
 	"github.com/retrixe/octyne/system"
 )
 
-// joinPath joins any number of path elements into a single path, adding a separating slash if necessary.
-func joinPath(elem ...string) string {
-	return filepath.FromSlash(path.Join(elem...))
+var errOutsideBaseDir = errors.New("the path is outside the base directory")
+
+// resolvePath joins the OS-native process directory with slash-separated subpaths, ensuring that
+// the result is clean.
+func resolvePath(base string, subpaths ...string) (string, error) {
+	base = filepath.Clean(base)
+	subpath, err := filepath.Localize(path.Join(subpaths...))
+	if err != nil {
+		return "", err
+	}
+	result := filepath.Join(base, subpath)
+	if !filepathHasPrefix(result, base) {
+		return "", errOutsideBaseDir
+	}
+	return result, nil
 }
 
-// clean combines path.Clean with filepath.FromSlash.
-func clean(pathToClean string) string {
-	return filepath.FromSlash(path.Clean(pathToClean))
+// filepathHasPrefix is a version of [filepath.HasPrefix] fixed for path boundaries.
+// Case insensitivity isn't fixed, but that's a crime anyway. Paths must be cleaned beforehand.
+func filepathHasPrefix(path string, prefix string) bool {
+	return strings.HasPrefix(path+string(filepath.Separator), prefix+string(filepath.Separator))
 }
 
 // GET /server/{id}/files?path=path
@@ -78,9 +92,9 @@ func filesEndpointGet(w http.ResponseWriter, r *http.Request, process *ExposedPr
 	// Check if folder is in the process directory or not.
 	process.ServerConfigMutex.RLock()
 	defer process.ServerConfigMutex.RUnlock()
-	folderPath := joinPath(process.Directory, r.URL.Query().Get("path"))
-	if !strings.HasPrefix(folderPath, clean(process.Directory)) {
-		httpError(w, "The folder requested is outside the server!", http.StatusForbidden)
+	folderPath, err := resolvePath(process.Directory, r.URL.Query().Get("path"))
+	if err != nil {
+		httpError(w, "Invalid folder path: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 	// Get list of files and folders in the directory.
@@ -109,7 +123,7 @@ func filesEndpointGet(w http.ResponseWriter, r *http.Request, process *ExposedPr
 				length = value.Size()
 			}
 			buffer := make([]byte, length)
-			path := joinPath(process.Directory, r.URL.Query().Get("path"), value.Name())
+			path := filepath.Join(folderPath, value.Name())
 			file, err := os.Open(path)
 			if err == nil {
 				file.Read(buffer) // skipcq GSC-G104
@@ -154,9 +168,9 @@ func validateFileOperation(operation *fileOperation, process *ExposedProcess) st
 	if operation.Operation == "rm" {
 		source = operation.Path
 	}
-	source = joinPath(process.Directory, source)
-	if !strings.HasPrefix(source, clean(process.Directory)) || source == clean(process.Directory) {
-		return "The file(s) specified in src/path is outside the server!"
+	source, err := resolvePath(process.Directory, source)
+	if err != nil || source == filepath.Clean(process.Directory) {
+		return "Invalid source path: " + err.Error()
 	}
 	if operation.Operation == "rm" {
 		operation.Path = source
@@ -165,9 +179,9 @@ func validateFileOperation(operation *fileOperation, process *ExposedProcess) st
 	}
 	if operation.Operation == "mv" || operation.Operation == "cp" {
 		// Resolve dest and check if dest exists within bounds of the server directory.
-		operation.Dest = joinPath(process.Directory, operation.Dest)
-		if !strings.HasPrefix(operation.Dest, clean(process.Directory)) {
-			return "The path(s) specified in dest is outside the server!"
+		operation.Dest, err = resolvePath(process.Directory, operation.Dest)
+		if err != nil {
+			return "Invalid destination path: " + err.Error()
 		}
 	}
 	return ""
@@ -186,7 +200,7 @@ func performMoveCopyOperation(operation *fileOperation) (int, string) {
 	// Validate destination
 	destStat, err := os.Stat(operation.Dest)
 	if err == nil && destStat.IsDir() {
-		operation.Dest = joinPath(operation.Dest, path.Base(operation.Src))
+		operation.Dest = filepath.Join(operation.Dest, filepath.Base(operation.Src))
 		_, err := os.Stat(operation.Dest)
 		if err == nil {
 			return http.StatusConflict, "This file already exists!"
@@ -298,7 +312,7 @@ func filesEndpointPatch(
 					break
 				}
 			}
-			operation.Dest = joinPath(removeTmpFolder, strconv.Itoa(index))
+			operation.Dest = filepath.Join(removeTmpFolder, strconv.Itoa(index))
 
 			errStatus, errMsg := performRemoveOperation(operation)
 			if errStatus != 0 {
@@ -387,19 +401,18 @@ func fileEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	// Get the process being accessed.
-	process, err := connector.Processes.Load(id)
+	process, ok := connector.Processes.Load(id)
 	// In case the process doesn't exist.
-	if !err {
+	if !ok {
 		httpError(w, "This server does not exist!", http.StatusNotFound)
 		return
 	}
 	// Check if path is in the process directory or not.
 	process.ServerConfigMutex.RLock()
 	defer process.ServerConfigMutex.RUnlock()
-	filePath := joinPath(process.Directory, r.URL.Query().Get("path"))
-	if (r.Method == "GET" || r.Method == "POST" || r.Method == "DELETE") &&
-		!strings.HasPrefix(filePath, clean(process.Directory)) {
-		httpError(w, "The file requested is outside the server!", http.StatusForbidden)
+	filePath, err := resolvePath(process.Directory, r.URL.Query().Get("path"))
+	if (r.Method == "GET" || r.Method == "POST" || r.Method == "DELETE") && err != nil {
+		httpError(w, "Invalid file path: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 	switch r.Method {
@@ -436,7 +449,7 @@ func fileEndpointGet(connector *Connector, w http.ResponseWriter, r *http.Reques
 	file, _ = os.Open(filePath)
 	defer file.Close()
 	connector.Info("server.files.download", "ip", GetIP(r), "user", user, "server", id,
-		"path", clean(r.URL.Query().Get("path")))
+		"path", path.Clean(r.URL.Query().Get("path")))
 	io.Copy(w, file)
 }
 
@@ -456,7 +469,11 @@ func fileEndpointPost(connector *Connector, w http.ResponseWriter, r *http.Reque
 	}
 	defer file.Close()
 	// read the file.
-	filePath = joinPath(filePath, meta.Filename)
+	filePath, err = resolvePath(filePath, meta.Filename)
+	if err != nil {
+		httpError(w, "Invalid file name: "+err.Error(), http.StatusBadRequest)
+		return
+	}
 	toWrite, err := os.Create(filePath)
 	stat, statErr := os.Stat(filePath)
 	if statErr == nil && stat.IsDir() {
@@ -470,7 +487,7 @@ func fileEndpointPost(connector *Connector, w http.ResponseWriter, r *http.Reque
 	defer toWrite.Close()
 	// write this byte array to our file
 	connector.Info("server.files.upload", "ip", GetIP(r), "user", user, "server", id,
-		"path", clean(r.URL.Query().Get("path")), "filename", meta.Filename)
+		"path", path.Clean(r.URL.Query().Get("path")), "filename", meta.Filename)
 	io.Copy(toWrite, file)
 	writeJsonStringRes(w, "{\"success\":true}")
 }
@@ -519,10 +536,10 @@ func fileEndpointPatch(connector *Connector, w http.ResponseWriter, r *http.Requ
 		}
 		if req.Operation == "mv" {
 			connector.Info("server.files.move", "ip", GetIP(r), "user", user, "server", id,
-				"src", clean(req.Src), "dest", clean(req.Dest))
+				"src", path.Clean(req.Src), "dest", path.Clean(req.Dest))
 		} else {
 			connector.Info("server.files.copy", "ip", GetIP(r), "user", user, "server", id,
-				"src", clean(req.Src), "dest", clean(req.Dest))
+				"src", path.Clean(req.Src), "dest", path.Clean(req.Dest))
 		}
 		writeJsonStringRes(w, "{\"success\":true}")
 	} else {
@@ -533,6 +550,7 @@ func fileEndpointPatch(connector *Connector, w http.ResponseWriter, r *http.Requ
 func fileEndpointDelete(connector *Connector, w http.ResponseWriter, r *http.Request,
 	id string, filePath string, user string) {
 	// Check if the file exists.
+	// TODO: Maybe we should block deleting the entire server folder... It's probably an accident...
 	if filePath == "/" {
 		httpError(w, "This operation is dangerous and has been forbidden!", http.StatusForbidden)
 		return
@@ -552,7 +570,7 @@ func fileEndpointDelete(connector *Connector, w http.ResponseWriter, r *http.Req
 		return
 	}
 	connector.Info("server.files.delete", "ip", GetIP(r), "user", user, "server", id,
-		"path", clean(r.URL.Query().Get("path")))
+		"path", path.Clean(r.URL.Query().Get("path")))
 	writeJsonStringRes(w, "{\"success\":true}")
 }
 
@@ -575,13 +593,12 @@ func folderEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request
 		// Check if the folder already exists.
 		process.ServerConfigMutex.RLock()
 		defer process.ServerConfigMutex.RUnlock()
-		file := joinPath(process.Directory, r.URL.Query().Get("path"))
-		// Check if folder is in the process directory or not.
-		if !strings.HasPrefix(file, clean(process.Directory)) {
-			httpError(w, "The folder requested is outside the server!", http.StatusForbidden)
+		file, err := resolvePath(process.Directory, r.URL.Query().Get("path"))
+		if err != nil {
+			httpError(w, "Invalid folder path: "+err.Error(), http.StatusBadRequest)
 			return
 		}
-		_, err := os.Stat(file)
+		_, err = os.Stat(file)
 		if !os.IsNotExist(err) {
 			httpError(w, "This folder already exists!", http.StatusBadRequest)
 			return
@@ -594,7 +611,7 @@ func folderEndpoint(connector *Connector, w http.ResponseWriter, r *http.Request
 			return
 		}
 		connector.Info("server.files.createFolder", "ip", GetIP(r), "user", user, "server", id,
-			"path", clean(r.URL.Query().Get("path")))
+			"path", path.Clean(r.URL.Query().Get("path")))
 		writeJsonStringRes(w, "{\"success\":true}")
 	} else {
 		httpError(w, "Only POST is allowed!", http.StatusMethodNotAllowed)
@@ -641,7 +658,11 @@ func compressionEndpoint(connector *Connector, w http.ResponseWriter, r *http.Re
 	}
 	// Decode parameters.
 	async := r.URL.Query().Get("async") == "true"
-	basePath := r.URL.Query().Get("basePath")
+	basePath, err := resolvePath(process.Directory, r.URL.Query().Get("basePath"))
+	if err != nil {
+		httpError(w, "Invalid base path: "+err.Error(), http.StatusBadRequest)
+		return
+	}
 	archiveType := "zip"
 	compression := "true"
 	if r.URL.Query().Get("archiveType") != "" {
@@ -660,7 +681,7 @@ func compressionEndpoint(connector *Connector, w http.ResponseWriter, r *http.Re
 	}
 	// Get the body.
 	var buffer bytes.Buffer
-	_, err := buffer.ReadFrom(r.Body)
+	_, err = buffer.ReadFrom(r.Body)
 	if err != nil {
 		httpError(w, "Failed to read body!", http.StatusBadRequest)
 		return
@@ -675,14 +696,10 @@ func compressionEndpoint(connector *Connector, w http.ResponseWriter, r *http.Re
 	// Validate every path.
 	process.ServerConfigMutex.RLock()
 	defer process.ServerConfigMutex.RUnlock()
-	if !strings.HasPrefix(joinPath(process.Directory, basePath), clean(process.Directory)) {
-		httpError(w, "The base path is outside the server directory!", http.StatusForbidden)
-		return
-	}
 	for _, file := range files {
-		filepath := joinPath(process.Directory, basePath, file)
-		if !strings.HasPrefix(filepath, clean(process.Directory)) {
-			httpError(w, "One of the paths provided is outside the server directory!", http.StatusForbidden)
+		filepath, err := resolvePath(basePath, file)
+		if err != nil {
+			httpError(w, "Invalid file path "+file+": "+err.Error(), http.StatusBadRequest)
 			return
 		} else if _, err := os.Stat(filepath); err != nil {
 			if os.IsNotExist(err) {
@@ -695,9 +712,9 @@ func compressionEndpoint(connector *Connector, w http.ResponseWriter, r *http.Re
 		}
 	}
 	// Check if a file exists at the location of the archive.
-	archivePath := joinPath(process.Directory, r.URL.Query().Get("path"))
-	if !strings.HasPrefix(archivePath, clean(process.Directory)) {
-		httpError(w, "The requested archive is outside the server directory!", http.StatusForbidden)
+	archivePath, err := resolvePath(process.Directory, r.URL.Query().Get("path"))
+	if err != nil {
+		httpError(w, "Invalid archive path: ", http.StatusBadRequest)
 		return
 	}
 	_, err = os.Stat(archivePath)
@@ -723,7 +740,7 @@ func compressionEndpoint(connector *Connector, w http.ResponseWriter, r *http.Re
 			defer archive.Close()
 			// Archive stuff inside.
 			for _, file := range files {
-				err := system.AddFileToZip(archive, joinPath(process.Directory, basePath), file, compression != "false")
+				err := system.AddFileToZip(archive, basePath, file, compression != "false")
 				if err != nil {
 					log.Println("An error occurred when adding "+file+" to "+archivePath, "("+process.Name+")", err)
 					if !async {
@@ -750,7 +767,7 @@ func compressionEndpoint(connector *Connector, w http.ResponseWriter, r *http.Re
 			}
 			defer archive.Close()
 			for _, file := range files {
-				err := system.AddFileToTar(archive, joinPath(process.Directory, basePath), file)
+				err := system.AddFileToTar(archive, basePath, file)
 				if err != nil {
 					log.Println("An error occurred when adding "+file+" to "+archivePath, "("+process.Name+")", err)
 					if !async {
@@ -763,8 +780,9 @@ func compressionEndpoint(connector *Connector, w http.ResponseWriter, r *http.Re
 			}
 		}
 		connector.Info("server.files.compress", "ip", GetIP(r), "user", user, "server", id,
-			"archive", clean(r.URL.Query().Get("path")), "archiveType", archiveType,
-			"compression", compression, "basePath", basePath, "files", files)
+			"path", path.Clean(r.URL.Query().Get("path")),
+			"archiveType", archiveType, "compression", compression,
+			"basePath", path.Clean(r.URL.Query().Get("basePath")), "files", files)
 		if async {
 			compressionProgressMap.Store(token, "finished")
 			go func() { // We want our previous Close() defers to call *now*, so we do this in goroutine
@@ -801,12 +819,11 @@ func decompressionEndpoint(connector *Connector, w http.ResponseWriter, r *http.
 	}
 	process.ServerConfigMutex.RLock()
 	defer process.ServerConfigMutex.RUnlock()
-	directory := clean(process.Directory)
 	if r.Method == "POST" {
 		// Check if the archive exists.
-		archivePath := joinPath(directory, r.URL.Query().Get("path"))
-		if !strings.HasPrefix(archivePath, directory) {
-			httpError(w, "The archive is outside the server directory!", http.StatusForbidden)
+		archivePath, err := resolvePath(process.Directory, r.URL.Query().Get("path"))
+		if err != nil {
+			httpError(w, "Invalid archive path: "+err.Error(), http.StatusBadRequest)
 			return
 		}
 		archiveStat, exists := os.Stat(archivePath)
@@ -823,14 +840,14 @@ func decompressionEndpoint(connector *Connector, w http.ResponseWriter, r *http.
 		}
 		// Check if there is a file/folder at the destination.
 		var body bytes.Buffer
-		_, err := body.ReadFrom(r.Body)
+		_, err = body.ReadFrom(r.Body)
 		if err != nil {
 			httpError(w, "Failed to read body!", http.StatusBadRequest)
 			return
 		}
-		unpackPath := joinPath(directory, body.String())
-		if !strings.HasPrefix(unpackPath, directory) {
-			httpError(w, "The archive file is outside the server directory!", http.StatusForbidden)
+		unpackPath, err := resolvePath(process.Directory, body.String())
+		if err != nil {
+			httpError(w, "Invalid destination path: "+err.Error(), http.StatusBadRequest)
 			return
 		}
 		stat, err := os.Stat(unpackPath)
@@ -868,7 +885,7 @@ func decompressionEndpoint(connector *Connector, w http.ResponseWriter, r *http.
 			return
 		}
 		connector.Info("server.files.decompress", "ip", GetIP(r), "user", user, "server", id,
-			"archive", clean(r.URL.Query().Get("path")), "destPath", body.String())
+			"archive", path.Clean(r.URL.Query().Get("path")), "destination", path.Clean(body.String()))
 		writeJsonStringRes(w, "{\"success\":true}")
 	} else {
 		httpError(w, "Only POST is allowed!", http.StatusMethodNotAllowed)
