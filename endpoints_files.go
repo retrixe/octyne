@@ -319,7 +319,11 @@ func filesEndpointPatch(
 			if req.Operations[revertIndex].Operation == "rm" {
 				source = req.Operations[revertIndex].Path
 			}
-			err = os.Rename(req.Operations[revertIndex].Dest, source)
+			if req.Operations[revertIndex].Operation == "cp" {
+				err = os.RemoveAll(req.Operations[revertIndex].Dest)
+			} else {
+				err = os.Rename(req.Operations[revertIndex].Dest, source)
+			}
 			if err != nil {
 				responseStatus = http.StatusInternalServerError
 				response.Errors = append(response.Errors, fileOperationError{
