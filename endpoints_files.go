@@ -30,7 +30,11 @@ var errOutsideBaseDir = errors.New("the path is outside the base directory")
 // the result is clean.
 func resolvePath(base string, subpaths ...string) (string, error) {
 	base = filepath.Clean(base)
-	subpath, err := filepath.Localize(path.Join(subpaths...))
+	subpath := strings.TrimLeft(path.Join(subpaths...), "/")
+	if subpath == "." || subpath == "" {
+		return base, nil
+	}
+	subpath, err := filepath.Localize(subpath)
 	if err != nil {
 		return "", err
 	}
